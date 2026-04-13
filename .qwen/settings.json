@@ -12,7 +12,15 @@
       "Bash(docker-compose *)",
       "Bash(psql *)",
       "Bash(brew *)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(sed *)",
+      "Bash(mkdir *)",
+      "Bash(tar *)",
+      "Bash(cp *)",
+      "Bash(rm *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(chmod *)"
     ]
   },
   "$version": 3

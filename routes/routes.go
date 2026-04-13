@@ -18,6 +18,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	appHandler := handlers.NewApplicationHandler(db)
 	adminHandler := handlers.NewAdminHandler(db)
 	repHandler := handlers.NewRepresentativeHandler(db)
+	docHandler := handlers.NewDocumentHandler(db)
 
 	// Define routes
 	api := r.Group("/api")
@@ -70,6 +71,14 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 				representative.PUT("/meetings/:id/status", repHandler.UpdateMeetingStatus)
 				representative.POST("/applications", repHandler.CreateCardApplication)
 			}
+
+			// Document generation endpoints
+			documents := protected.Group("/documents")
+			{
+				documents.GET("/:id/contract-pdf", docHandler.GenerateContractPDF)
+				documents.GET("/:id/schedule-pdf", docHandler.GeneratePaymentSchedulePDF)
+				documents.POST("/:id/send-to-client", docHandler.SendDocumentsToClient)
+			}
 		}
 	}
 
@@ -99,6 +108,22 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/reports", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-cache")
 		c.File("./static/reports.html")
+	})
+
+	// Credit process routes
+	r.GET("/product-selection", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/product-selection.html")
+	})
+
+	r.GET("/contract-generation", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/contract-generation.html")
+	})
+
+	r.GET("/payment-schedule", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/payment-schedule.html")
 	})
 
 	// Representative routes

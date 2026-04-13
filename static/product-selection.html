@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подбор кредитного продукта</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .hidden { display: none !important; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .header-top h1 { font-size: 24px; }
+        .back-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+        .back-btn:hover { background: rgba(255,255,255,0.3); }
+        .app-info { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        .info-badge { background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 20px; font-size: 14px; }
+        .header-actions { display: flex; gap: 10px; }
+        .btn-primary { background: white; color: #667eea; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; text-decoration: none; }
+        .btn-primary:hover { opacity: 0.9; }
+
+        /* Layout */
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+        /* Cards */
+        .card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .card-title { font-size: 18px; font-weight: 600; color: #333; }
+
+        /* Assessment Blocks */
+        .assessment-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+        .assessment-block { padding: 20px; border-radius: 10px; color: white; text-align: center; }
+        .assessment-block.green { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); }
+        .assessment-block.blue { background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); }
+        .assessment-block.purple { background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%); }
+        .assessment-icon { font-size: 32px; margin-bottom: 10px; }
+        .assessment-label { font-size: 14px; opacity: 0.9; margin-bottom: 5px; }
+        .assessment-value { font-size: 28px; font-weight: bold; }
+
+        /* AI Recommendations */
+        .ai-block { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 10px; border-left: 4px solid #667eea; }
+        .ai-title { font-weight: 600; color: #667eea; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .ai-text { color: #555; line-height: 1.6; }
+
+        /* Products Grid */
+        .products-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .product-card { border: 1px solid #ddd; border-radius: 10px; padding: 20px; cursor: pointer; transition: all 0.2s; position: relative; }
+        .product-card:hover { border-color: #667eea; box-shadow: 0 4px 15px rgba(102,126,234,0.15); }
+        .product-card.selected { border-color: #667eea; border-width: 2px; background: #f0f4ff; }
+        .product-badge { position: absolute; top: -10px; right: 15px; background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .product-icon { font-size: 28px; margin-bottom: 10px; }
+        .product-name { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #333; }
+        .product-desc { color: #666; font-size: 13px; margin-bottom: 12px; line-height: 1.4; }
+        .product-params { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .param-item { background: #f0f4ff; color: #667eea; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+
+        /* Product Editor Panel */
+        .editor-panel { background: white; border: 2px solid #667eea; border-radius: 10px; padding: 25px; margin-top: 20px; display: none; }
+        .editor-panel.active { display: block; }
+        .editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #eee; }
+        .editor-title { font-size: 20px; font-weight: 600; color: #667eea; }
+        .btn-close-editor { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
+        .btn-close-editor:hover { color: #333; }
+        .editor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #666; font-size: 14px; font-weight: 500; }
+        .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        .form-group input[type="range"] { padding: 0; }
+        .range-value { text-align: right; font-size: 14px; color: #667eea; font-weight: 600; margin-top: 5px; }
+        .form-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .editor-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
+        .btn-confirm { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        .btn-confirm:hover { opacity: 0.9; }
+        .btn-cancel { background: #f8f9fa; color: #666; padding: 12px 30px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        .btn-cancel:hover { background: #e9ecef; }
+
+        /* Results Preview */
+        .results-preview { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin-top: 20px; }
+        .results-preview-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; text-align: center; }
+        .results-preview-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .result-preview-item { background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; text-align: center; }
+        .result-preview-label { font-size: 11px; opacity: 0.9; margin-bottom: 4px; }
+        .result-preview-value { font-size: 18px; font-weight: bold; }
+
+        /* Sidebar */
+        .sidebar-card { border: 2px solid #667eea; }
+        .selected-product-name { font-size: 18px; font-weight: 600; color: #333; margin-bottom: 15px; }
+        .selected-product-params { display: grid; gap: 10px; margin-bottom: 15px; }
+        .selected-param { display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 5px; }
+        .selected-param-label { color: #666; font-size: 14px; }
+        .selected-param-value { font-weight: 600; color: #333; }
+        .monthly-payment-block { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px; }
+        .monthly-payment-label { font-size: 14px; opacity: 0.9; margin-bottom: 5px; }
+        .monthly-payment-value { font-size: 28px; font-weight: bold; }
+
+        /* Risk Assessment */
+        .risk-item { margin-bottom: 15px; }
+        .risk-label { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+        .risk-bar { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+        .risk-fill { height: 100%; border-radius: 4px; }
+        .risk-fill.green { background: #28a745; }
+        .risk-fill.yellow { background: #ffc107; }
+        .risk-recommendations { color: #555; font-size: 14px; line-height: 1.6; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+
+        /* Action Buttons */
+        .action-buttons { display: grid; gap: 10px; }
+        .btn-action { padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; display: block; }
+        .btn-action.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-action.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-action.secondary { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
+        .btn-action.secondary:hover { background: #e9ecef; }
+
+        /* Login */
+        .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { background: white; border-radius: 10px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 30px; color: #333; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .login-btn:hover { opacity: 0.9; }
+        .error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; }
+
+        /* No selection message */
+        .no-selection { text-align: center; padding: 30px 20px; color: #999; }
+        .no-selection-icon { font-size: 48px; margin-bottom: 10px; }
+        .no-selection-text { font-size: 14px; }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="login-section" class="login-container">
+        <div class="login-card">
+            <h1>Подбор кредитного продукта</h1>
+            <div id="login-error" class="error hidden"></div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" id="login-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="login-password" placeholder="Введите пароль">
+            </div>
+            <button class="login-btn" onclick="login()">Войти</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-section" class="hidden">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-top">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <a href="/analyst" class="back-btn">
+                        <span>←</span> Назад к заявкам
+                    </a>
+                    <h1>Подбор кредитного продукта</h1>
+                </div>
+                <div class="header-actions">
+                    <a href="/contract-generation" class="btn-primary" id="go-to-contract-btn">Перейти к договору</a>
+                </div>
+            </div>
+            <div class="app-info">
+                <span class="info-badge">Заявка: <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 4px;" id="app-id-badge">—</span></span>
+                <span class="info-badge">Клиент: <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 4px;" id="app-client-badge">—</span></span>
+                <span class="info-badge">Сумма: <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 4px;" id="app-amount-badge">—</span></span>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="main-grid">
+                <!-- Left Column -->
+                <div class="left-column">
+                    <!-- Card 1: Assessment -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Оценка платежеспособности клиента</div>
+                        </div>
+                        <div class="assessment-grid">
+                            <div class="assessment-block green">
+                                <div class="assessment-icon">✓</div>
+                                <div class="assessment-label">Кредитный рейтинг</div>
+                                <div class="assessment-value" id="credit-score">—</div>
+                            </div>
+                            <div class="assessment-block blue">
+                                <div class="assessment-icon">$</div>
+                                <div class="assessment-label">Ежемесячный доход</div>
+                                <div class="assessment-value" id="monthly-income">—</div>
+                            </div>
+                            <div class="assessment-block purple">
+                                <div class="assessment-icon">%</div>
+                                <div class="assessment-label">Долговая нагрузка</div>
+                                <div class="assessment-value" id="dti-ratio">—</div>
+                            </div>
+                        </div>
+                        <div class="ai-block">
+                            <div class="ai-title">🤖 Рекомендации ИИ</div>
+                            <div class="ai-text" id="ai-recommendation">
+                                Загрузите заявку для получения персонализированных рекомендаций.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Products -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Доступные кредитные продукты</div>
+                        </div>
+                        <div class="products-grid" id="products-grid">
+                            <!-- Products will be rendered by JS -->
+                        </div>
+
+                        <!-- Editor Panel -->
+                        <div class="editor-panel" id="editor-panel">
+                            <div class="editor-header">
+                                <div class="editor-title" id="editor-title">Настройка продукта</div>
+                                <button class="btn-close-editor" onclick="closeEditor()">×</button>
+                            </div>
+                            <div class="editor-grid">
+                                <div>
+                                    <div class="form-group">
+                                        <label>Сумма кредита</label>
+                                        <input type="range" id="editor-amount-range" oninput="updateEditorAmount(this.value)">
+                                        <div class="range-value" id="editor-amount-value">0 ₽</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Срок кредитования (месяцев)</label>
+                                        <input type="range" id="editor-term-range" oninput="updateEditorTerm(this.value)">
+                                        <div class="range-value" id="editor-term-value">0 месяцев</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Процентная ставка</label>
+                                            <select id="editor-rate"></select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Тип платежа</label>
+                                            <select id="editor-payment-type">
+                                                <option value="annuity">Аннуитетный</option>
+                                                <option value="differentiated">Дифференцированный</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Первоначальный взнос</label>
+                                        <input type="number" id="editor-down-payment" value="0" placeholder="Сумма взноса">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Results Preview -->
+                            <div class="results-preview">
+                                <div class="results-preview-title">Результаты расчета</div>
+                                <div class="results-preview-grid">
+                                    <div class="result-preview-item">
+                                        <div class="result-preview-label">Ежемесячный платеж</div>
+                                        <div class="result-preview-value" id="editor-monthly">0 ₽</div>
+                                    </div>
+                                    <div class="result-preview-item">
+                                        <div class="result-preview-label">Переплата</div>
+                                        <div class="result-preview-value" id="editor-overpayment">0 ₽</div>
+                                    </div>
+                                    <div class="result-preview-item">
+                                        <div class="result-preview-label">Общая сумма</div>
+                                        <div class="result-preview-value" id="editor-total">0 ₽</div>
+                                    </div>
+                                    <div class="result-preview-item">
+                                        <div class="result-preview-label">Эффективная ставка</div>
+                                        <div class="result-preview-value" id="editor-effective">0%</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="editor-actions">
+                                <button class="btn-confirm" onclick="confirmProductSelection()">✓ Подтвердить и выбрать</button>
+                                <button class="btn-cancel" onclick="closeEditor()">Отмена</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="right-column">
+                    <!-- Selected Product -->
+                    <div class="card sidebar-card" id="selected-product-card">
+                        <div class="card-header">
+                            <div class="card-title">Выбранный продукт</div>
+                        </div>
+                        <div id="selected-product-content">
+                            <div class="no-selection">
+                                <div class="no-selection-icon">📋</div>
+                                <div class="no-selection-text">Выберите кредитный продукт из списка</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Risk Assessment -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Оценка рисков</div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="risk-label">
+                                <span>Кредитный риск</span>
+                                <span style="color: #28a745;" id="credit-risk-text">Низкий</span>
+                            </div>
+                            <div class="risk-bar">
+                                <div class="risk-fill green" id="credit-risk-bar" style="width: 25%;"></div>
+                            </div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="risk-label">
+                                <span>Финансовая нагрузка</span>
+                                <span style="color: #ffc107;" id="financial-risk-text">Средняя</span>
+                            </div>
+                            <div class="risk-bar">
+                                <div class="risk-fill yellow" id="financial-risk-bar" style="width: 55%;"></div>
+                            </div>
+                        </div>
+                        <div class="risk-recommendations" id="risk-recommendations">
+                            Рекомендуется дополнительная проверка платежеспособности.
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Действия</div>
+                        </div>
+                        <div class="action-buttons">
+                            <a href="/contract-generation" class="btn-action primary" id="action-contract">Сформировать договор</a>
+                            <a href="/payment-schedule" class="btn-action secondary" id="action-schedule">Просмотреть график</a>
+                            <button class="btn-action secondary" onclick="resetSelection()">Изменить выбор</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let token = null;
+        let applicationData = null;
+        let applicationId = null;
+        let selectedProduct = null;
+        let currentEditingProduct = null;
+
+        // Product catalog
+        const products = [
+            {
+                id: 'auto-optimal',
+                name: 'Автокредит «Оптимальный»',
+                icon: '🚗',
+                desc: 'Для приобретения нового или подержанного автомобиля',
+                rateMin: 12, rateMax: 18, rateDefault: 14,
+                termMin: 12, termMax: 84, termDefault: 60,
+                amountMin: 100000, amountMax: 5000000, amountDefault: 800000,
+                rates: [12, 14, 16, 18],
+                paymentType: 'annuity',
+                recommended: true,
+                category: 'auto'
+            },
+            {
+                id: 'auto-express',
+                name: 'Автокредит «Экспресс»',
+                icon: '⚡',
+                desc: 'Быстрое оформление автокредита за 1 час',
+                rateMin: 14, rateMax: 20, rateDefault: 16,
+                termMin: 12, termMax: 60, termDefault: 36,
+                amountMin: 50000, amountMax: 3000000, amountDefault: 500000,
+                rates: [14, 16, 18, 20],
+                paymentType: 'annuity',
+                recommended: false,
+                category: 'auto'
+            },
+            {
+                id: 'consumer-standard',
+                name: 'Потребительский «Стандарт»',
+                icon: '💳',
+                desc: 'Универсальный кредит на любые цели без залога',
+                rateMin: 14, rateMax: 22, rateDefault: 16,
+                termMin: 6, termMax: 60, termDefault: 36,
+                amountMin: 30000, amountMax: 3000000, amountDefault: 500000,
+                rates: [14, 16, 18, 22],
+                paymentType: 'annuity',
+                recommended: false,
+                category: 'consumer'
+            },
+            {
+                id: 'consumer-premium',
+                name: 'Потребительский «Премиум»',
+                icon: '⭐',
+                desc: 'Повышенная сумма для клиентов с высоким рейтингом',
+                rateMin: 12, rateMax: 18, rateDefault: 14,
+                termMin: 12, termMax: 84, termDefault: 48,
+                amountMin: 100000, amountMax: 5000000, amountDefault: 1500000,
+                rates: [12, 14, 16, 18],
+                paymentType: 'differentiated',
+                recommended: false,
+                category: 'consumer'
+            },
+            {
+                id: 'mortgage-family',
+                name: 'Ипотека «Семейная»',
+                icon: '🏠',
+                desc: 'Льготная программа для семей с детьми',
+                rateMin: 6, rateMax: 12, rateDefault: 8,
+                termMin: 60, termMax: 360, termDefault: 240,
+                amountMin: 500000, amountMax: 12000000, amountDefault: 4000000,
+                rates: [6, 8, 10, 12],
+                paymentType: 'annuity',
+                recommended: false,
+                category: 'mortgage'
+            },
+            {
+                id: 'mortgage-standard',
+                name: 'Ипотека «Классическая»',
+                icon: '🏡',
+                desc: 'Стандартная ипотечная программа на выгодных условиях',
+                rateMin: 10, rateMax: 16, rateDefault: 12,
+                termMin: 60, termMax: 360, termDefault: 180,
+                amountMin: 500000, amountMax: 10000000, amountDefault: 3000000,
+                rates: [10, 12, 14, 16],
+                paymentType: 'annuity',
+                recommended: false,
+                category: 'mortgage'
+            },
+            {
+                id: 'cash-universal',
+                name: 'Кредит наличными «Универсальный»',
+                icon: '💰',
+                desc: 'Гибкие условия для постоянных клиентов банка',
+                rateMin: 14, rateMax: 20, rateDefault: 16,
+                termMin: 6, termMax: 60, termDefault: 24,
+                amountMin: 30000, amountMax: 2000000, amountDefault: 300000,
+                rates: [14, 16, 18, 20],
+                paymentType: 'annuity',
+                recommended: false,
+                category: 'cash'
+            },
+            {
+                id: 'card-100days',
+                name: 'Кредитная карта «100 дней»',
+                icon: '💎',
+                desc: 'Беспроцентный период 100 дней на покупки',
+                rateMin: 18, rateMax: 28, rateDefault: 24,
+                termMin: 12, termMax: 36, termDefault: 12,
+                amountMin: 30000, amountMax: 600000, amountDefault: 150000,
+                rates: [18, 22, 24, 28],
+                paymentType: 'annuity',
+                recommended: false,
+                category: 'card'
+            },
+            {
+                id: 'business-start',
+                name: 'Бизнес-кредит «Старт»',
+                icon: '📈',
+                desc: 'Для начинающих предпринимателей и малого бизнеса',
+                rateMin: 16, rateMax: 24, rateDefault: 18,
+                termMin: 12, termMax: 60, termDefault: 36,
+                amountMin: 200000, amountMax: 10000000, amountDefault: 1000000,
+                rates: [16, 18, 20, 24],
+                paymentType: 'differentiated',
+                recommended: false,
+                category: 'business'
+            },
+            {
+                id: 'business-development',
+                name: 'Бизнес-кредит «Развитие»',
+                icon: '🚀',
+                desc: 'Для расширения действующего бизнеса',
+                rateMin: 14, rateMax: 20, rateDefault: 16,
+                termMin: 24, termMax: 120, termDefault: 60,
+                amountMin: 500000, amountMax: 15000000, amountDefault: 3000000,
+                rates: [14, 16, 18, 20],
+                paymentType: 'differentiated',
+                recommended: false,
+                category: 'business'
+            }
+        ];
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function renderProducts() {
+            const grid = document.getElementById('products-grid');
+            grid.innerHTML = '';
+
+            products.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'product-card' + (selectedProduct && selectedProduct.id === p.id ? ' selected' : '');
+                card.onclick = () => openEditor(p);
+                card.innerHTML = `
+                    ${p.recommended ? '<div class="product-badge">Рекомендуется</div>' : ''}
+                    <div class="product-icon">${p.icon}</div>
+                    <div class="product-name">${p.name}</div>
+                    <div class="product-desc">${p.desc}</div>
+                    <div class="product-params">
+                        <span class="param-item">Ставка от ${p.rateMin}%</span>
+                        <span class="param-item">Срок до ${p.termMax} мес</span>
+                        <span class="param-item">от ${formatMoney(p.amountMin)}</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function openEditor(product) {
+            currentEditingProduct = product;
+            const panel = document.getElementById('editor-panel');
+            panel.classList.add('active');
+            document.getElementById('editor-title').textContent = product.name;
+
+            // Setup amount range
+            const amountRange = document.getElementById('editor-amount-range');
+            amountRange.min = product.amountMin;
+            amountRange.max = product.amountMax;
+            amountRange.step = 10000;
+            amountRange.value = product.amountDefault;
+            updateEditorAmount(product.amountDefault);
+
+            // Setup term range
+            const termRange = document.getElementById('editor-term-range');
+            termRange.min = product.termMin;
+            termRange.max = product.termMax;
+            termRange.step = 1;
+            termRange.value = product.termDefault;
+            updateEditorTerm(product.termDefault);
+
+            // Setup rates
+            const rateSelect = document.getElementById('editor-rate');
+            rateSelect.innerHTML = '';
+            product.rates.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r;
+                opt.textContent = r + '%';
+                if (r === product.rateDefault) opt.selected = true;
+                rateSelect.appendChild(opt);
+            });
+
+            // Setup payment type
+            document.getElementById('editor-payment-type').value = product.paymentType;
+            document.getElementById('editor-down-payment').value = 0;
+
+            // Add listeners
+            amountRange.oninput = () => updateEditorAmount(amountRange.value);
+            termRange.oninput = () => updateEditorTerm(termRange.value);
+            rateSelect.onchange = calculateEditorLoan;
+            document.getElementById('editor-payment-type').onchange = calculateEditorLoan;
+            document.getElementById('editor-down-payment').oninput = calculateEditorLoan;
+
+            calculateEditorLoan();
+
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function closeEditor() {
+            document.getElementById('editor-panel').classList.remove('active');
+            currentEditingProduct = null;
+        }
+
+        function updateEditorAmount(value) {
+            document.getElementById('editor-amount-value').textContent = formatMoney(parseInt(value));
+            calculateEditorLoan();
+        }
+
+        function updateEditorTerm(value) {
+            document.getElementById('editor-term-value').textContent = value + ' ' + monthWord(parseInt(value));
+            calculateEditorLoan();
+        }
+
+        function calculateEditorLoan() {
+            const amount = parseFloat(document.getElementById('editor-amount-range').value);
+            const term = parseInt(document.getElementById('editor-term-range').value);
+            const rate = parseFloat(document.getElementById('editor-rate').value);
+            const downPayment = parseFloat(document.getElementById('editor-down-payment').value) || 0;
+            const paymentType = document.getElementById('editor-payment-type').value;
+
+            const loanAmount = amount - downPayment;
+            const monthlyRate = rate / 100 / 12;
+
+            let monthlyPayment, totalPayment;
+            if (paymentType === 'annuity') {
+                monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, term)) / (Math.pow(1 + monthlyRate, term) - 1);
+                totalPayment = monthlyPayment * term;
+            } else {
+                const principalPart = loanAmount / term;
+                let balance = loanAmount;
+                totalPayment = 0;
+                for (let i = 0; i < term; i++) {
+                    const interest = balance * monthlyRate;
+                    totalPayment += principalPart + interest;
+                    balance -= principalPart;
+                }
+                monthlyPayment = totalPayment / term; // average
+            }
+
+            const overpayment = totalPayment - loanAmount;
+            const effectiveRate = (overpayment / loanAmount) * 100 / (term / 12);
+
+            document.getElementById('editor-monthly').textContent = formatMoney(Math.round(monthlyPayment));
+            document.getElementById('editor-overpayment').textContent = formatMoney(Math.round(overpayment));
+            document.getElementById('editor-total').textContent = formatMoney(Math.round(totalPayment));
+            document.getElementById('editor-effective').textContent = effectiveRate.toFixed(1) + '%';
+        }
+
+        function confirmProductSelection() {
+            const amount = parseFloat(document.getElementById('editor-amount-range').value);
+            const term = parseInt(document.getElementById('editor-term-range').value);
+            const rate = parseFloat(document.getElementById('editor-rate').value);
+            const paymentType = document.getElementById('editor-payment-type').value;
+            const downPayment = parseFloat(document.getElementById('editor-down-payment').value) || 0;
+
+            const monthlyPaymentStr = document.getElementById('editor-monthly').textContent;
+            const overpaymentStr = document.getElementById('editor-overpayment').textContent;
+            const totalStr = document.getElementById('editor-total').textContent;
+            const effectiveStr = document.getElementById('editor-effective').textContent;
+
+            selectedProduct = {
+                ...currentEditingProduct,
+                selectedAmount: amount,
+                selectedTerm: term,
+                selectedRate: rate,
+                selectedDownPayment: downPayment,
+                selectedPaymentType: paymentType,
+                monthlyPayment: monthlyPaymentStr,
+                overpayment: overpaymentStr,
+                totalPayment: totalStr,
+                effectiveRate: effectiveStr
+            };
+
+            // Save to localStorage for other pages to use
+            localStorage.setItem('selectedLoanParams', JSON.stringify({
+                applicationId: applicationId,
+                productId: selectedProduct.id,
+                productName: selectedProduct.name,
+                selectedAmount: amount,
+                selectedTerm: term,
+                selectedRate: rate,
+                selectedDownPayment: downPayment,
+                selectedPaymentType: paymentType,
+                monthlyPayment: monthlyPaymentStr,
+                overpayment: overpaymentStr,
+                totalPayment: totalStr,
+                effectiveRate: effectiveStr
+            }));
+
+            closeEditor();
+            renderProducts();
+            renderSelectedProduct();
+            updateRiskAssessment();
+            updateActionLinks();
+        }
+
+        function renderSelectedProduct() {
+            const container = document.getElementById('selected-product-content');
+            if (!selectedProduct) {
+                container.innerHTML = `
+                    <div class="no-selection">
+                        <div class="no-selection-icon">📋</div>
+                        <div class="no-selection-text">Выберите кредитный продукт из списка</div>
+                    </div>
+                `;
+                return;
+            }
+
+            const p = selectedProduct;
+            const paymentTypeText = p.selectedPaymentType === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
+
+            container.innerHTML = `
+                <div class="selected-product-name">${p.icon} ${p.name}</div>
+                <div class="selected-product-params">
+                    <div class="selected-param">
+                        <span class="selected-param-label">Сумма</span>
+                        <span class="selected-param-value">${formatMoney(p.selectedAmount)}</span>
+                    </div>
+                    <div class="selected-param">
+                        <span class="selected-param-label">Срок</span>
+                        <span class="selected-param-value">${p.selectedTerm} ${monthWord(p.selectedTerm)}</span>
+                    </div>
+                    <div class="selected-param">
+                        <span class="selected-param-label">Ставка</span>
+                        <span class="selected-param-value">${p.selectedRate}%</span>
+                    </div>
+                    <div class="selected-param">
+                        <span class="selected-param-label">Тип платежа</span>
+                        <span class="selected-param-value">${paymentTypeText}</span>
+                    </div>
+                    <div class="selected-param">
+                        <span class="selected-param-label">Первонач. взнос</span>
+                        <span class="selected-param-value">${formatMoney(p.selectedDownPayment)}</span>
+                    </div>
+                </div>
+                <div class="monthly-payment-block">
+                    <div class="monthly-payment-label">Ежемесячный платеж</div>
+                    <div class="monthly-payment-value">${p.monthlyPayment}</div>
+                </div>
+                <div style="margin-top: 15px; display: grid; gap: 8px;">
+                    <div class="selected-param">
+                        <span class="selected-param-label">Переплата</span>
+                        <span class="selected-param-value">${p.overpayment}</span>
+                    </div>
+                    <div class="selected-param">
+                        <span class="selected-param-label">Общая сумма</span>
+                        <span class="selected-param-value">${p.totalPayment}</span>
+                    </div>
+                    <div class="selected-param">
+                        <span class="selected-param-label">Эфф. ставка</span>
+                        <span class="selected-param-value">${p.effectiveRate}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateRiskAssessment() {
+            if (!selectedProduct) return;
+
+            const income = applicationData ? (applicationData.monthly_income || 85000) : 85000;
+            const monthlyPayment = parseFloat(selectedProduct.monthlyPayment.replace(/\s/g, '').replace('₽', '')) || 0;
+            const dti = income > 0 ? (monthlyPayment / income) * 100 : 0;
+
+            // Credit risk
+            const score = applicationData ? (applicationData.credit_score || 720) : 720;
+            let creditRiskText, creditRiskWidth, creditRiskClass;
+            if (score >= 700) {
+                creditRiskText = 'Низкий'; creditRiskWidth = '25%'; creditRiskClass = 'green';
+            } else if (score >= 600) {
+                creditRiskText = 'Средний'; creditRiskWidth = '50%'; creditRiskClass = 'yellow';
+            } else {
+                creditRiskText = 'Высокий'; creditRiskWidth = '75%'; creditRiskClass = 'yellow';
+            }
+
+            document.getElementById('credit-risk-text').textContent = creditRiskText;
+            document.getElementById('credit-risk-text').style.color = creditRiskClass === 'green' ? '#28a745' : '#ffc107';
+            document.getElementById('credit-risk-bar').style.width = creditRiskWidth;
+            document.getElementById('credit-risk-bar').className = 'risk-fill ' + creditRiskClass;
+
+            // Financial load
+            let finText, finWidth;
+            if (dti < 30) { finText = 'Низкая'; finWidth = '25%'; }
+            else if (dti < 50) { finText = 'Средняя'; finWidth = '50%'; }
+            else { finText = 'Высокая'; finWidth = '75%'; }
+
+            document.getElementById('financial-risk-text').textContent = finText;
+            document.getElementById('financial-risk-text').style.color = dti < 50 ? '#ffc107' : '#dc3545';
+            document.getElementById('financial-risk-bar').style.width = finWidth;
+
+            // Recommendations
+            let recs = '';
+            if (dti > 50) {
+                recs = 'Финансовая нагрузка превышает 50% дохода. Рекомендуется снизить сумму кредита или увеличить срок.';
+            } else if (dti > 30) {
+                recs = 'Нагрузка в допустимых пределах, но близко к границе. Рассмотрите вариант увеличения срока кредитования.';
+            } else {
+                recs = 'Финансовая нагрузка комфортна. Клиент способен обслуживать данный кредит без затруднений.';
+            }
+            document.getElementById('risk-recommendations').textContent = recs;
+        }
+
+        function resetSelection() {
+            selectedProduct = null;
+            localStorage.removeItem('selectedLoanParams');
+            renderProducts();
+            renderSelectedProduct();
+            updateActionLinks();
+            document.getElementById('credit-risk-text').textContent = 'Низкий';
+            document.getElementById('credit-risk-bar').style.width = '25%';
+            document.getElementById('financial-risk-text').textContent = 'Средняя';
+            document.getElementById('financial-risk-bar').style.width = '55%';
+            document.getElementById('risk-recommendations').textContent = 'Рекомендуется дополнительная проверка платежеспособности.';
+        }
+
+        function formatMoney(value) {
+            return Number(value).toLocaleString('ru-RU') + ' ₽';
+        }
+
+        function monthWord(n) {
+            const remainder = n % 100;
+            if (remainder >= 11 && remainder <= 14) return 'месяцев';
+            const last = n % 10;
+            if (last === 1) return 'месяц';
+            if (last >= 2 && last <= 4) return 'месяца';
+            return 'месяцев';
+        }
+
+        async function loadApplicationData() {
+            applicationId = getQueryParam('application_id');
+            if (!applicationId) {
+                console.log('No application_id in URL');
+                return;
+            }
+
+            if (!token) {
+                token = localStorage.getItem('adminToken');
+            }
+            if (!token) {
+                console.log('No auth token available');
+                return;
+            }
+
+            console.log('Loading application data for ID:', applicationId);
+
+            try {
+                const response = await fetch(`${API_URL}/api/applications/${applicationId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    console.error('API response not OK:', response.status, response.statusText);
+                    return;
+                }
+
+                const result = await response.json();
+                console.log('API response:', result);
+
+                // API returns { application: {...}, credit_type_text: "..." }
+                const data = result.application || result;
+                console.log('Application data:', data);
+
+                if (data && data.id) {
+                    applicationData = data;
+                    populateApplicationData();
+                    console.log('Application data populated successfully');
+                } else {
+                    console.warn('Received empty or invalid application data');
+                }
+            } catch (err) {
+                console.error('Failed to load application data:', err);
+            }
+        }
+
+        function populateApplicationData() {
+            if (!applicationData) return;
+            const app = applicationData;
+
+            // Update badges
+            const idBadge = document.getElementById('app-id-badge');
+            const clientBadge = document.getElementById('app-client-badge');
+            const amountBadge = document.getElementById('app-amount-badge');
+
+            if (idBadge) idBadge.textContent = app.id || '—';
+            if (clientBadge) clientBadge.textContent = app.client_name || app.full_name || '—';
+            if (amountBadge) amountBadge.textContent = app.requested_amount ? formatMoney(app.requested_amount) : '—';
+
+            // Update assessment
+            const scoreEl = document.getElementById('credit-score');
+            const incomeEl = document.getElementById('monthly-income');
+            const dtiEl = document.getElementById('dti-ratio');
+
+            if (scoreEl) scoreEl.textContent = app.credit_score || '—';
+            if (incomeEl) incomeEl.textContent = app.monthly_income ? formatMoney(app.monthly_income) : '—';
+            if (dtiEl) dtiEl.textContent = app.dti_ratio ? Math.round(app.dti_ratio * 100) + '%' : '—';
+
+            // AI recommendations
+            if (app.ai_comment || app.recommendation_reason) {
+                const aiText = document.getElementById('ai-recommendation');
+                if (aiText) aiText.textContent = app.ai_comment || app.recommendation_reason;
+            }
+        }
+
+        function buildProductUrl(baseUrl) {
+            if (!selectedProduct) return baseUrl;
+            const params = new URLSearchParams();
+            if (applicationId) params.set('application_id', applicationId);
+            params.set('amount', selectedProduct.selectedAmount);
+            params.set('term', selectedProduct.selectedTerm);
+            params.set('rate', selectedProduct.selectedRate);
+            params.set('type', selectedProduct.selectedPaymentType);
+            // Product name is saved in localStorage, no need to include in URL
+            return `${baseUrl}?${params.toString()}`;
+        }
+
+        function updateActionLinks() {
+            const contractLink = document.getElementById('go-to-contract-btn');
+            const actionContract = document.getElementById('action-contract');
+            const actionSchedule = document.getElementById('action-schedule');
+
+            if (contractLink) contractLink.href = buildProductUrl('/contract-generation');
+            if (actionContract) actionContract.href = buildProductUrl('/contract-generation');
+            if (actionSchedule) actionSchedule.href = buildProductUrl('/payment-schedule');
+        }
+
+        function checkAuth() {
+            token = localStorage.getItem('adminToken');
+            if (token) {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('main-section').classList.remove('hidden');
+                // Load application data after auth is confirmed
+                loadApplicationData();
+            } else {
+                document.getElementById('login-section').classList.remove('hidden');
+                document.getElementById('main-section').classList.add('hidden');
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch(API_URL + '/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (data.token) {
+                    localStorage.setItem('adminToken', data.token);
+                    token = data.token;
+                    document.getElementById('login-section').classList.add('hidden');
+                    document.getElementById('main-section').classList.remove('hidden');
+                    // After login, load application data
+                    await loadApplicationData();
+                } else {
+                    const errorEl = document.getElementById('login-error');
+                    errorEl.textContent = data.error || 'Ошибка авторизации';
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (err) {
+                const errorEl = document.getElementById('login-error');
+                errorEl.textContent = 'Ошибка подключения к серверу';
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('selectedRole');
+            token = null;
+            checkAuth();
+        }
+
+        // Initialize
+        window.onload = async function() {
+            renderProducts();
+            renderSelectedProduct();
+            checkAuth();
+        };
+    </script>
+</body>
+</html>

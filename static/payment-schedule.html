@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>График погашения кредита</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .hidden { display: none !important; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; }
+        .header-top h1 { font-size: 24px; }
+        .back-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+        .back-btn:hover { background: rgba(255,255,255,0.3); }
+        .header-actions { display: flex; gap: 10px; }
+        .btn-header { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-header:hover { background: rgba(255,255,255,0.3); }
+        .btn-header:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Layout */
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+        /* Metrics Cards */
+        .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .metric-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 15px; }
+        .metric-icon { width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: white; flex-shrink: 0; }
+        .metric-icon.blue { background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); }
+        .metric-icon.orange { background: linear-gradient(135deg, #fd7e14 0%, #e83e8c 100%); }
+        .metric-icon.green { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); }
+        .metric-icon.purple { background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%); }
+        .metric-content { flex: 1; }
+        .metric-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+        .metric-value { font-size: 22px; font-weight: 600; color: #333; }
+
+        /* Cards */
+        .card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .card-title { font-size: 18px; font-weight: 600; color: #333; }
+
+        /* Payment Type Toggle */
+        .toggle-group { display: flex; gap: 10px; }
+        .toggle-btn { padding: 8px 16px; border: 1px solid #ddd; border-radius: 5px; background: white; cursor: pointer; font-size: 14px; }
+        .toggle-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: transparent; }
+        .toggle-btn:hover:not(.active) { background: #f8f9fa; }
+
+        /* Table */
+        .schedule-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .schedule-table th, .schedule-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .schedule-table th { background: #f8f9fa; font-weight: 600; color: #555; position: sticky; top: 0; }
+        .schedule-table tr:hover { background: #f8f9fa; }
+        .schedule-table .total-row { background: #e7f3ff; font-weight: 600; }
+        .table-wrapper { max-height: 500px; overflow-y: auto; border: 1px solid #eee; border-radius: 5px; }
+
+        /* Chart */
+        .chart-wrapper { display: flex; gap: 10px; align-items: stretch; }
+        .chart-y-axis { width: 70px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding-right: 8px; }
+        .chart-y-label { font-size: 11px; color: #666; text-align: right; white-space: nowrap; }
+        .chart-y-title { font-size: 11px; color: #999; text-align: center; transform: rotate(-90deg); white-space: nowrap; }
+        .chart-area { flex: 1; display: flex; flex-direction: column; }
+        .chart-container { height: 350px; display: flex; align-items: flex-end; gap: 3px; padding: 0; flex: 1; border-left: 2px solid #ddd; border-bottom: 2px solid #ddd; }
+        .chart-bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; }
+        .chart-bar-principal { background: #007bff; border-radius: 2px 2px 0 0; min-height: 2px; }
+        .chart-bar-interest { background: #fd7e14; border-radius: 0; min-height: 2px; }
+        .chart-x-axis { display: flex; gap: 3px; padding-left: 2px; }
+        .chart-x-label { flex: 1; text-align: center; font-size: 10px; color: #999; white-space: nowrap; overflow: hidden; }
+        .chart-legend { display: flex; gap: 20px; justify-content: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #666; }
+        .legend-color { width: 16px; height: 16px; border-radius: 3px; }
+        .legend-color.blue { background: #007bff; }
+        .legend-color.orange { background: #fd7e14; }
+
+        /* Sidebar */
+        .sidebar-card { border: 2px solid #007bff; }
+        .summary-grid { display: grid; gap: 10px; }
+        .summary-item { display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+        .summary-label { color: #666; font-size: 14px; }
+        .summary-value { font-weight: 600; color: #333; font-size: 14px; }
+
+        /* Pie Chart */
+        .pie-chart-container { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+        .pie-chart { width: 120px; height: 120px; flex-shrink: 0; }
+        .pie-legend { flex: 1; }
+        .pie-legend-item { padding: 8px; border-radius: 5px; margin-bottom: 8px; }
+        .pie-legend-item.blue { background: #e7f3ff; }
+        .pie-legend-item.orange { background: #fff3e0; }
+        .pie-legend-label { font-size: 12px; color: #666; margin-bottom: 3px; }
+        .pie-legend-value { font-size: 16px; font-weight: 600; }
+
+        /* Early Repayment */
+        .early-repayment-block { background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin-top: 15px; }
+        .early-repayment-title { font-weight: 600; color: #155724; margin-bottom: 10px; }
+        .early-repayment-content { color: #155724; line-height: 1.6; }
+
+        /* Action Buttons */
+        .action-buttons { display: grid; gap: 10px; }
+        .btn-action { padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-action.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-action.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-action.secondary { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
+        .btn-action.secondary:hover { background: #e9ecef; }
+        .btn-action.secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Login */
+        .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { background: white; border-radius: 10px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 30px; color: #333; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .login-btn:hover { opacity: 0.9; }
+        .error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; }
+
+        /* Forms */
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #666; font-size: 14px; }
+        .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="login-section" class="login-container">
+        <div class="login-card">
+            <h1>График погашения кредита</h1>
+            <div id="login-error" class="error hidden"></div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" id="login-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="login-password" placeholder="Введите пароль">
+            </div>
+            <button class="login-btn" onclick="login()">Войти</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-section" class="hidden">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-top">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <a href="/contract-generation" class="back-btn">
+                        <span>←</span> Назад к договору
+                    </a>
+                    <h1>График погашения кредита</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-header" disabled>
+                        <span>📥</span> Скачать
+                    </button>
+                    <button class="btn-header" disabled>
+                        <span>🖨</span> Печать
+                    </button>
+                    <button class="btn-header" disabled>
+                        <span>✉</span> Отправить клиенту
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <!-- Metrics -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon blue">$</div>
+                    <div class="metric-content">
+                        <div class="metric-label">Сумма кредита</div>
+                        <div class="metric-value">500 000 ₽</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon orange">↓</div>
+                    <div class="metric-content">
+                        <div class="metric-label">Переплата</div>
+                        <div class="metric-value">79 168 ₽</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon green">📅</div>
+                    <div class="metric-content">
+                        <div class="metric-label">Ежемесячный платеж</div>
+                        <div class="metric-value">24 132 ₽</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon purple">%</div>
+                    <div class="metric-content">
+                        <div class="metric-label">Процентная ставка</div>
+                        <div class="metric-value">14%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-grid">
+                <!-- Left Column -->
+                <div class="left-column">
+                    <!-- Payment Schedule Table -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Детальный график платежей</div>
+                            <div class="toggle-group">
+                                <button class="toggle-btn active" onclick="switchPaymentType('annuity')">Аннуитетный</button>
+                                <button class="toggle-btn" onclick="switchPaymentType('differentiated')">Дифференцированный</button>
+                            </div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="schedule-table">
+                                <thead>
+                                    <tr>
+                                        <th>№</th>
+                                        <th>Дата платежа</th>
+                                        <th>Платеж</th>
+                                        <th>Основной долг</th>
+                                        <th>Проценты</th>
+                                        <th>Остаток</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="schedule-body">
+                                    <!-- Rows will be generated by JS -->
+                                </tbody>
+                                <tfoot>
+                                    <tr class="total-row">
+                                        <td colspan="2">Итого</td>
+                                        <td id="total-payment">579 168 ₽</td>
+                                        <td id="total-principal">500 000 ₽</td>
+                                        <td id="total-interest">79 168 ₽</td>
+                                        <td>-</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Payment Structure Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Структура платежей по месяцам</div>
+                        </div>
+                        <div class="chart-wrapper">
+                            <div class="chart-y-axis" id="chart-y-axis">
+                                <div class="chart-y-label" id="y-max"></div>
+                                <div class="chart-y-label" id="y-mid"></div>
+                                <div class="chart-y-label" id="y-min">0 ₽</div>
+                            </div>
+                            <div class="chart-area">
+                                <div class="chart-container" id="payment-chart">
+                                    <!-- Bars will be generated by JS -->
+                                </div>
+                                <div class="chart-x-axis" id="chart-x-axis">
+                                    <!-- Month labels will be generated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-legend">
+                            <div class="legend-item">
+                                <div class="legend-color blue"></div>
+                                <span>Основной долг</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color orange"></div>
+                                <span>Проценты</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="right-column">
+                    <!-- Credit Parameters -->
+                    <div class="card sidebar-card">
+                        <div class="card-header">
+                            <div class="card-title">Параметры кредита</div>
+                        </div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Сумма</span>
+                                <span class="summary-value">500 000 ₽</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Срок</span>
+                                <span class="summary-value">24 месяца</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Ставка</span>
+                                <span class="summary-value">14%</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Тип платежа</span>
+                                <span class="summary-value">Аннуитетный</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Дата выдачи</span>
+                                <span class="summary-value">13.04.2026</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Дата погашения</span>
+                                <span class="summary-value">13.04.2028</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Distribution -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Распределение выплат</div>
+                        </div>
+                        <div class="pie-chart-container">
+                            <svg class="pie-chart" viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="40" fill="none" stroke="#007bff" stroke-width="20" 
+                                    stroke-dasharray="175 251" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+                                <circle cx="50" cy="50" r="40" fill="none" stroke="#fd7e14" stroke-width="20" 
+                                    stroke-dasharray="76 251" stroke-dashoffset="-175" transform="rotate(-90 50 50)"/>
+                            </svg>
+                            <div class="pie-legend">
+                                <div class="pie-legend-item blue">
+                                    <div class="pie-legend-label">Основной долг</div>
+                                    <div class="pie-legend-value">500 000 ₽</div>
+                                </div>
+                                <div class="pie-legend-item orange">
+                                    <div class="pie-legend-label">Проценты</div>
+                                    <div class="pie-legend-value">79 168 ₽</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Early Repayment -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Досрочное погашение</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Сумма досрочного погашения</label>
+                            <input type="number" id="early-amount" placeholder="Введите сумму">
+                        </div>
+                        <div class="form-group">
+                            <label>Дата платежа</label>
+                            <input type="date" id="early-date">
+                        </div>
+                        <button class="btn-action primary" onclick="calculateEarlyRepayment()" style="width: 100%;">
+                            Рассчитать экономию
+                        </button>
+                        <div id="early-result" class="early-repayment-block hidden">
+                            <div class="early-repayment-title">Результат расчета</div>
+                            <div class="early-repayment-content" id="early-result-text">
+                                placeholder
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Действия</div>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn-action secondary" onclick="downloadSchedulePDF()">
+                                <span>📄</span> Скачать PDF
+                            </button>
+                            <button class="btn-action secondary" onclick="window.print()">
+                                <span>🖨</span> Печать
+                            </button>
+                            <button class="btn-action secondary" onclick="sendScheduleToClient()">
+                                <span>✉</span> Отправить клиенту
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let token = null;
+        let applicationId = null;
+
+        // Loan parameters - from URL, localStorage, or defaults
+        let loanAmount = 500000;
+        let loanTerm = 24;
+        let annualRate = 14;
+        let paymentType = 'annuity'; // 'annuity' or 'differentiated'
+        let currentDate = new Date();
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function loadLoanParams() {
+            // Try to get from localStorage (saved from product-selection)
+            const saved = localStorage.getItem('selectedLoanParams');
+            if (saved) {
+                try {
+                    const params = JSON.parse(saved);
+                    loanAmount = params.selectedAmount || params.amount || loanAmount;
+                    loanTerm = params.selectedTerm || params.term || loanTerm;
+                    annualRate = params.selectedRate || params.rate || annualRate;
+                    paymentType = params.selectedPaymentType || params.paymentType || paymentType;
+                } catch (e) { /* ignore parse error */ }
+            }
+
+            // Override with URL params if present
+            const urlAmount = getQueryParam('amount');
+            const urlTerm = getQueryParam('term');
+            const urlRate = getQueryParam('rate');
+            const urlType = getQueryParam('type');
+
+            if (urlAmount) loanAmount = parseFloat(urlAmount);
+            if (urlTerm) loanTerm = parseInt(urlTerm);
+            if (urlRate) annualRate = parseFloat(urlRate);
+            if (urlType && (urlType === 'annuity' || urlType === 'differentiated')) paymentType = urlType;
+
+            // Update UI toggle
+            document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.querySelector(`.toggle-btn[onclick*="${paymentType}"]`);
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+
+        function downloadSchedulePDF() {
+            const appId = applicationId || getQueryParam('application_id');
+            if (!appId) {
+                alert('ID заявки не указан. Невозможно сформировать документ.');
+                return;
+            }
+
+            const url = `${API_URL}/api/documents/${appId}/schedule-pdf?loan_amount=${loanAmount}&loan_term=${loanTerm}&interest_rate=${annualRate}`;
+
+            fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text || 'Ошибка загрузки PDF'); });
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                if (blob.type === 'application/json') {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const err = JSON.parse(reader.result);
+                            alert('Ошибка: ' + (err.error || 'Не удалось создать PDF'));
+                        } catch(e) { alert('Ошибка при создании PDF'); }
+                    };
+                    reader.readAsText(blob);
+                    return;
+                }
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = `schedule_${appId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(blobUrl);
+                document.body.removeChild(a);
+            })
+            .catch(err => {
+                console.error('PDF download error:', err);
+                alert('Не удалось скачать PDF: ' + err.message);
+            });
+        }
+
+        function sendScheduleToClient() {
+            const appId = applicationId || getQueryParam('application_id');
+            if (!appId) {
+                alert('ID заявки не указан.');
+                return;
+            }
+
+            fetch(`${API_URL}/api/documents/${appId}/send-to-client`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message || 'График платежей отправлен клиенту');
+            })
+            .catch(err => {
+                alert('Ошибка отправки: ' + err.message);
+            });
+        }
+
+        function checkAuth() {
+            token = localStorage.getItem('adminToken');
+            if (token) {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('main-section').classList.remove('hidden');
+                
+                // Update links with application_id
+                applicationId = getQueryParam('application_id');
+                if (applicationId) {
+                    document.querySelectorAll('a[href="/contract-generation"]').forEach(link => {
+                        link.href = `/contract-generation?application_id=${applicationId}`;
+                    });
+                }
+            } else {
+                document.getElementById('login-section').classList.remove('hidden');
+                document.getElementById('main-section').classList.add('hidden');
+            }
+        }
+
+        function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            fetch(API_URL + '/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.token) {
+                    localStorage.setItem('adminToken', data.token);
+                    token = data.token;
+                    checkAuth();
+                } else {
+                    const errorEl = document.getElementById('login-error');
+                    errorEl.textContent = data.error || 'Ошибка авторизации';
+                    errorEl.classList.remove('hidden');
+                }
+            })
+            .catch(err => {
+                const errorEl = document.getElementById('login-error');
+                errorEl.textContent = 'Ошибка подключения к серверу';
+                errorEl.classList.remove('hidden');
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('selectedRole');
+            token = null;
+            checkAuth();
+        }
+
+        function calculateAnnuity() {
+            const monthlyRate = annualRate / 100 / 12;
+            const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, loanTerm)) / (Math.pow(1 + monthlyRate, loanTerm) - 1);
+            let balance = loanAmount;
+            const schedule = [];
+            const startMonth = currentDate.getMonth();
+            const startYear = currentDate.getFullYear();
+
+            for (let i = 1; i <= loanTerm; i++) {
+                const interest = balance * monthlyRate;
+                const principal = monthlyPayment - interest;
+                balance -= principal;
+
+                const paymentDate = new Date(startYear, startMonth + i, currentDate.getDate());
+                const dateStr = paymentDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+                schedule.push({
+                    num: i,
+                    date: dateStr,
+                    payment: monthlyPayment,
+                    principal: principal,
+                    interest: interest,
+                    balance: Math.max(0, balance)
+                });
+            }
+
+            return schedule;
+        }
+
+        function calculateDifferentiated() {
+            const monthlyRate = annualRate / 100 / 12;
+            const principalPart = loanAmount / loanTerm;
+            let balance = loanAmount;
+            const schedule = [];
+            const startMonth = currentDate.getMonth();
+            const startYear = currentDate.getFullYear();
+
+            for (let i = 1; i <= loanTerm; i++) {
+                const interest = balance * monthlyRate;
+                const payment = principalPart + interest;
+                balance -= principalPart;
+
+                const paymentDate = new Date(startYear, startMonth + i, currentDate.getDate());
+                const dateStr = paymentDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+                schedule.push({
+                    num: i,
+                    date: dateStr,
+                    payment: payment,
+                    principal: principalPart,
+                    interest: interest,
+                    balance: Math.max(0, balance)
+                });
+            }
+
+            return schedule;
+        }
+
+        function calculateSchedule() {
+            return paymentType === 'annuity' ? calculateAnnuity() : calculateDifferentiated();
+        }
+
+        function renderSchedule(schedule) {
+            const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = '';
+
+            schedule.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.num}</td>
+                    <td>${row.date}</td>
+                    <td>${Math.round(row.payment).toLocaleString('ru-RU')} ₽</td>
+                    <td>${Math.round(row.principal).toLocaleString('ru-RU')} ₽</td>
+                    <td>${Math.round(row.interest).toLocaleString('ru-RU')} ₽</td>
+                    <td>${Math.round(row.balance).toLocaleString('ru-RU')} ₽</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderChart(schedule) {
+            const container = document.getElementById('payment-chart');
+            container.innerHTML = '';
+            
+            const xAxis = document.getElementById('chart-x-axis');
+            xAxis.innerHTML = '';
+
+            const maxPayment = Math.max(...schedule.map(s => s.payment));
+
+            // Y-axis labels
+            const yMax = Math.ceil(maxPayment / 5000) * 5000;
+            const yMid = Math.round(yMax / 2);
+            document.getElementById('y-max').textContent = formatMoney(Math.round(yMax));
+            document.getElementById('y-mid').textContent = formatMoney(Math.round(yMid));
+            document.getElementById('y-min').textContent = '0 ₽';
+
+            schedule.forEach((row, index) => {
+                const bar = document.createElement('div');
+                bar.className = 'chart-bar';
+                bar.title = `Месяц ${row.num}: ${formatMoney(Math.round(row.payment))}`;
+
+                const principalHeight = (row.principal / maxPayment) * 100;
+                const interestHeight = (row.interest / maxPayment) * 100;
+
+                bar.innerHTML = `
+                    <div class="chart-bar-interest" style="height: ${interestHeight}%"></div>
+                    <div class="chart-bar-principal" style="height: ${principalHeight}%"></div>
+                `;
+                container.appendChild(bar);
+
+                // X-axis label - show every Nth month to avoid crowding
+                const showEvery = schedule.length > 24 ? 3 : schedule.length > 12 ? 2 : 1;
+                const label = document.createElement('div');
+                label.className = 'chart-x-label';
+                label.textContent = (index + 1) % showEvery === 0 || index === 0 ? row.num : '';
+                xAxis.appendChild(label);
+            });
+        }
+
+        function switchPaymentType(type) {
+            paymentType = type;
+            document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            const schedule = calculateSchedule();
+            renderSchedule(schedule);
+            renderChart(schedule);
+            updateTotals(schedule);
+            updateMetrics();
+        }
+
+        function updateTotals(schedule) {
+            let totalPayment = 0, totalPrincipal = 0, totalInterest = 0;
+            schedule.forEach(row => {
+                totalPayment += row.payment;
+                totalPrincipal += row.principal;
+                totalInterest += row.interest;
+            });
+
+            document.getElementById('total-payment').textContent = formatMoney(Math.round(totalPayment));
+            document.getElementById('total-principal').textContent = formatMoney(Math.round(totalPrincipal));
+            document.getElementById('total-interest').textContent = formatMoney(Math.round(totalInterest));
+        }
+
+        function formatMoney(value) {
+            return Number(value).toLocaleString('ru-RU') + ' ₽';
+        }
+
+        function updateMetrics() {
+            const monthlyRate = annualRate / 100 / 12;
+            let monthlyPayment, totalPayment;
+
+            if (paymentType === 'annuity') {
+                monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, loanTerm)) / (Math.pow(1 + monthlyRate, loanTerm) - 1);
+                totalPayment = monthlyPayment * loanTerm;
+            } else {
+                const principalPart = loanAmount / loanTerm;
+                let balance = loanAmount;
+                totalPayment = 0;
+                for (let i = 0; i < loanTerm; i++) {
+                    totalPayment += principalPart + balance * monthlyRate;
+                    balance -= principalPart;
+                }
+                monthlyPayment = totalPayment / loanTerm;
+            }
+
+            const overpayment = totalPayment - loanAmount;
+
+            // Update metric cards
+            document.querySelector('.metric-card:nth-child(1) .metric-value').textContent = formatMoney(Math.round(loanAmount));
+            document.querySelector('.metric-card:nth-child(2) .metric-value').textContent = formatMoney(Math.round(overpayment));
+            document.querySelector('.metric-card:nth-child(3) .metric-value').textContent = formatMoney(Math.round(monthlyPayment));
+            document.querySelector('.metric-card:nth-child(4) .metric-value').textContent = annualRate + '%';
+
+            // Update parameters card
+            const params = document.querySelector('.sidebar-card .summary-grid');
+            if (params) {
+                const typeText = paymentType === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
+                params.innerHTML = `
+                    <div class="summary-item"><span class="summary-label">Сумма</span><span class="summary-value">${formatMoney(Math.round(loanAmount))}</span></div>
+                    <div class="summary-item"><span class="summary-label">Срок</span><span class="summary-value">${loanTerm} мес</span></div>
+                    <div class="summary-item"><span class="summary-label">Ставка</span><span class="summary-value">${annualRate}%</span></div>
+                    <div class="summary-item"><span class="summary-label">Тип платежа</span><span class="summary-value">${typeText}</span></div>
+                    <div class="summary-item"><span class="summary-label">Дата выдачи</span><span class="summary-value">${currentDate.toLocaleDateString('ru-RU')}</span></div>
+                    <div class="summary-item"><span class="summary-label">Дата погашения</span><span class="summary-value">${new Date(currentDate.getFullYear(), currentDate.getMonth() + loanTerm, currentDate.getDate()).toLocaleDateString('ru-RU')}</span></div>
+                `;
+            }
+        }
+
+        function calculateEarlyRepayment() {
+            const amount = parseFloat(document.getElementById('early-amount').value) || 0;
+            if (amount <= 0) {
+                alert('Введите сумму досрочного погашения');
+                return;
+            }
+
+            const resultBlock = document.getElementById('early-result');
+            const resultText = document.getElementById('early-result-text');
+            
+            const newBalance = loanAmount - amount;
+            const interestSaved = amount * monthlyRate * (loanTerm / 2);
+            
+            resultText.innerHTML = `
+                При досрочном погашении суммы <strong>${amount.toLocaleString('ru-RU')} ₽</strong>:<br><br>
+                Новый остаток долга: <strong>${newBalance.toLocaleString('ru-RU')} ₽</strong><br>
+                Экономия на процентах: <strong>~${Math.round(interestSaved).toLocaleString('ru-RU')} ₽</strong><br><br>
+                <em>* Расчет является предварительным. Для точного расчета обратитесь в банк.</em>
+            `;
+            resultBlock.classList.remove('hidden');
+        }
+
+        // Initialize
+        window.onload = function() {
+            checkAuth();
+            loadLoanParams();
+            
+            const schedule = calculateSchedule();
+            renderSchedule(schedule);
+            renderChart(schedule);
+            updateTotals(schedule);
+            updateMetrics();
+        };
+    </script>
+</body>
+</html>

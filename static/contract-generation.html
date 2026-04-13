@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Формирование кредитного договора</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .hidden { display: none !important; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; }
+        .header-top h1 { font-size: 24px; }
+        .back-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+        .back-btn:hover { background: rgba(255,255,255,0.3); }
+        .header-actions { display: flex; gap: 10px; }
+        .btn-header { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+        .btn-header:hover { background: rgba(255,255,255,0.3); }
+        .btn-header:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Layout */
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+        /* Cards */
+        .card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .card-title { font-size: 18px; font-weight: 600; color: #333; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 0; }
+        .tab-btn { padding: 12px 20px; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 14px; color: #666; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+        .tab-btn.active { color: #667eea; border-bottom-color: #667eea; font-weight: 600; }
+        .tab-btn:hover:not(.active) { color: #333; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Forms */
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #666; font-size: 14px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; font-family: inherit; }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .form-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .form-row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .form-section { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        .form-section:last-child { border-bottom: none; }
+        .form-section-title { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 15px; }
+
+        /* Info Block */
+        .info-block { background: #e7f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff; margin-top: 15px; }
+        .info-block-title { font-weight: 600; color: #007bff; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .info-block-content { color: #555; line-height: 1.6; }
+        .info-block-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+        .info-block-item { background: rgba(255,255,255,0.5); padding: 10px; border-radius: 5px; text-align: center; }
+        .info-block-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+        .info-block-value { font-size: 16px; font-weight: 600; color: #007bff; }
+
+        /* Checkboxes */
+        .checkbox-group { display: grid; gap: 10px; margin-top: 10px; }
+        .checkbox-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; cursor: pointer; }
+        .checkbox-item input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        .checkbox-item label { cursor: pointer; margin: 0; color: #333; }
+
+        /* Preview */
+        .preview-card { border: 2px solid #ddd; min-height: 400px; padding: 30px; background: white; }
+        .preview-title { text-align: center; font-size: 18px; font-weight: 600; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #333; }
+        .preview-content { color: #333; line-height: 1.7; margin-bottom: 30px; font-size: 13px; }
+        .preview-line { margin-bottom: 8px; text-align: justify; }
+        .preview-line:first-letter { /* no special styling needed */ }
+        .preview-placeholder { color: #999; }
+        .preview-signatures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; }
+        .signature-block { text-align: center; }
+        .signature-label { font-weight: 600; margin-bottom: 40px; }
+        .signature-line { border-top: 1px solid #333; padding-top: 5px; font-size: 12px; color: #666; }
+
+        /* Sidebar */
+        .sidebar-card { border: 2px solid #007bff; }
+        .status-icon { font-size: 48px; color: #28a745; text-align: center; margin-bottom: 10px; }
+        .status-text { text-align: center; font-size: 16px; font-weight: 600; color: #28a745; margin-bottom: 15px; }
+        .status-details { display: grid; gap: 8px; }
+        .status-detail { display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 5px; font-size: 14px; }
+        .status-detail-label { color: #666; }
+        .status-detail-value { font-weight: 600; color: #333; }
+
+        /* Summary */
+        .summary-grid { display: grid; gap: 10px; }
+        .summary-item { display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+        .summary-label { color: #666; font-size: 14px; }
+        .summary-value { font-weight: 600; color: #333; font-size: 14px; }
+
+        /* Action Buttons */
+        .action-buttons { display: grid; gap: 10px; }
+        .btn-action { padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-action.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-action.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-action.secondary { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
+        .btn-action.secondary:hover { background: #e9ecef; }
+        .btn-action.secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-action.success { background: #28a745; color: white; }
+        .btn-action.success:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-action.info { background: #17a2b8; color: white; }
+        .btn-action.info:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Checklist */
+        .checklist { display: grid; gap: 10px; }
+        .checklist-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+        .checklist-icon { color: #28a745; font-size: 20px; flex-shrink: 0; }
+        .checklist-text { color: #333; font-size: 14px; }
+
+        /* Dialog */
+        .dialog-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .dialog-content { background: white; border-radius: 10px; padding: 30px; max-width: 500px; width: 90%; }
+        .dialog-title { font-size: 20px; font-weight: 600; margin-bottom: 20px; }
+        .dialog-body { margin-bottom: 25px; }
+        .dialog-list { display: grid; gap: 10px; margin-top: 15px; }
+        .dialog-list-item { padding: 10px; background: #f8f9fa; border-radius: 5px; display: flex; align-items: center; gap: 10px; }
+        .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .btn-dialog { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        .btn-dialog.cancel { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
+        .btn-dialog.confirm { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+
+        /* Login */
+        .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { background: white; border-radius: 10px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 30px; color: #333; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .login-btn:hover { opacity: 0.9; }
+        .error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; }
+
+        /* Guarantors */
+        .guarantor-list { display: grid; gap: 10px; margin-bottom: 15px; }
+        .guarantor-item { padding: 12px; background: #f8f9fa; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .guarantor-name { font-weight: 500; }
+        .btn-add { background: #f8f9fa; border: 1px dashed #ddd; padding: 10px; border-radius: 5px; cursor: pointer; width: 100%; text-align: center; color: #666; }
+        .btn-add:hover { border-color: #667eea; color: #667eea; }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="login-section" class="login-container">
+        <div class="login-card">
+            <h1>Формирование кредитного договора</h1>
+            <div id="login-error" class="error hidden"></div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" id="login-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="login-password" placeholder="Введите пароль">
+            </div>
+            <button class="login-btn" onclick="login()">Войти</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-section" class="hidden">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-top">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <a href="/product-selection" class="back-btn">
+                        <span>←</span> Назад к подбору продукта
+                    </a>
+                    <h1>Формирование кредитного договора</h1>
+                </div>
+                <div class="header-actions">
+                    <a href="#" class="btn-header" disabled>
+                        <span>👁</span> Предпросмотр
+                    </a>
+                    <a href="/payment-schedule" class="btn-header">
+                        <span>📅</span> График платежей
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="main-grid">
+                <!-- Left Column -->
+                <div class="left-column">
+                    <!-- Contract Parameters -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Параметры договора</div>
+                        </div>
+                        <div class="tabs">
+                            <button class="tab-btn active" onclick="switchTab('main')">
+                                <span>📄</span> Основное
+                            </button>
+                            <button class="tab-btn" onclick="switchTab('parties')">
+                                <span>👤</span> Стороны
+                            </button>
+                            <button class="tab-btn" onclick="switchTab('conditions')">
+                                <span>💲</span> Условия
+                            </button>
+                            <button class="tab-btn" onclick="switchTab('security')">
+                                <span>🛡</span> Обеспечение
+                            </button>
+                        </div>
+
+                        <!-- Tab 1: Main -->
+                        <div id="tab-main" class="tab-content active">
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label>Номер договора</label>
+                                    <input type="text" id="contract-number" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                                <div class="form-group">
+                                    <label>Дата заключения</label>
+                                    <input type="date" id="contract-date" value="">
+                                </div>
+                            </div>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label>Тип кредитного продукта</label>
+                                    <input type="text" id="contract-product-type" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                                <div class="form-group">
+                                    <label>Наименование продукта</label>
+                                    <input type="text" id="contract-product-name" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Сумма кредита</label>
+                                    <input type="text" id="contract-amount" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                                <div class="form-group">
+                                    <label>Срок</label>
+                                    <input type="text" id="contract-term" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                                <div class="form-group">
+                                    <label>Процентная ставка</label>
+                                    <input type="text" id="contract-rate" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                            </div>
+                            <div class="info-block">
+                                <div class="info-block-title">📊 Расчетные данные</div>
+                                <div class="info-block-grid">
+                                    <div class="info-block-item">
+                                        <div class="info-block-label">Ежемесячный платеж</div>
+                                        <div class="info-block-value" id="calc-monthly">—</div>
+                                    </div>
+                                    <div class="info-block-item">
+                                        <div class="info-block-label">Общая сумма</div>
+                                        <div class="info-block-value" id="calc-total">—</div>
+                                    </div>
+                                    <div class="info-block-item">
+                                        <div class="info-block-label">Переплата</div>
+                                        <div class="info-block-value" id="calc-overpayment">—</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab 2: Parties -->
+                        <div id="tab-parties" class="tab-content">
+                            <div class="form-section">
+                                <div class="form-section-title">Кредитор (Банк)</div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label>Наименование</label>
+                                        <input type="text" value="АО «ТБанк»" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>ИНН</label>
+                                        <input type="text" value="7700123456" readonly style="background: #f8f9fa;">
+                                    </div>
+                                </div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label>КПП</label>
+                                        <input type="text" value="770001001" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Юридический адрес</label>
+                                        <input type="text" value="placeholder" readonly style="background: #f8f9fa;">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-section">
+                                <div class="form-section-title">Заемщик (Клиент)</div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label>ФИО</label>
+                                        <input type="text" id="borrower-fullname" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Дата рождения</label>
+                                        <input type="date" id="borrower-birthdate" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Место рождения</label>
+                                    <input type="text" id="borrower-birthplace" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Серия паспорта</label>
+                                        <input type="text" id="borrower-passport-series" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Номер паспорта</label>
+                                        <input type="text" id="borrower-passport-number" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Дата выдачи</label>
+                                        <input type="date" id="borrower-passport-date" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Адрес регистрации</label>
+                                    <input type="text" id="borrower-address" value="" readonly style="background: #f8f9fa;">
+                                </div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label>Телефон</label>
+                                        <input type="tel" id="borrower-phone" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Email</label>
+                                        <input type="email" id="borrower-email" value="" readonly style="background: #f8f9fa;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab 3: Conditions -->
+                        <div id="tab-conditions" class="tab-content">
+                            <div class="form-group">
+                                <label>Цель кредита</label>
+                                <textarea placeholder="Опишите цель получения кредита..."></textarea>
+                            </div>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label>Способ погашения</label>
+                                    <select>
+                                        <option>Ежемесячные платежи</option>
+                                        <option>Автоматическое списание</option>
+                                        <option>Через кассу</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Дата первого платежа</label>
+                                    <input type="date" value="2026-05-13">
+                                </div>
+                            </div>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label>День платежа (число месяца)</label>
+                                    <input type="number" value="13" min="1" max="31">
+                                </div>
+                                <div class="form-group"></div>
+                            </div>
+                            <div class="form-section">
+                                <div class="form-section-title">Штрафы и пени</div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label>Процент за просрочку (% в день)</label>
+                                        <input type="number" value="0.1" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Фиксированный штраф (₽)</label>
+                                        <input type="number" value="500">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="info-block">
+                                <div class="info-block-title">✓ Досрочное погашение</div>
+                                <div class="info-block-content">
+                                    Заемщик имеет право на досрочное погашение кредита частично или полностью без комиссий и штрафов. Уведомление банка за 30 дней до даты погашения.
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 20px;">
+                                <label>Дополнительные условия</label>
+                                <textarea placeholder="Укажите дополнительные условия договора..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Tab 4: Security -->
+                        <div id="tab-security" class="tab-content">
+                            <div class="form-group">
+                                <label>Тип обеспечения</label>
+                                <select>
+                                    <option>Залог имущества</option>
+                                    <option>Поручительство</option>
+                                    <option>Страхование</option>
+                                    <option>Без обеспечения</option>
+                                </select>
+                            </div>
+                            <div class="form-section">
+                                <div class="form-section-title">Залоговое имущество</div>
+                                <div class="form-group">
+                                    <label>Описание</label>
+                                    <textarea placeholder="Опишите залоговое имущество..."></textarea>
+                                </div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label>Стоимость</label>
+                                        <input type="text" value="placeholder" readonly style="background: #f8f9fa;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Дата оценки</label>
+                                        <input type="date" value="placeholder" readonly style="background: #f8f9fa;">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-section">
+                                <div class="form-section-title">Страхование</div>
+                                <div class="checkbox-group">
+                                    <div class="checkbox-item">
+                                        <input type="checkbox" id="insurance-life">
+                                        <label for="insurance-life">Страхование жизни и здоровья</label>
+                                    </div>
+                                    <div class="checkbox-item">
+                                        <input type="checkbox" id="insurance-property">
+                                        <label for="insurance-property">Страхование имущества</label>
+                                    </div>
+                                    <div class="checkbox-item">
+                                        <input type="checkbox" id="insurance-complex">
+                                        <label for="insurance-complex">Комплексное страхование</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-section">
+                                <div class="form-section-title">Поручители</div>
+                                <div class="guarantor-list">
+                                    <div class="guarantor-item">
+                                        <span class="guarantor-name">placeholder</span>
+                                        <span style="color: #999;">placeholder</span>
+                                    </div>
+                                </div>
+                                <button class="btn-add">+ Добавить поручителя</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contract Preview -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Предпросмотр договора</div>
+                        </div>
+                        <div class="preview-card">
+                            <div class="preview-title" id="preview-contract-title">КРЕДИТНЫЙ ДОГОВОР № —</div>
+                            <div class="preview-content">
+                                <div class="preview-line" style="text-indent: 0; margin-bottom: 10px;">
+                                    <span id="preview-bank-name">АО «ТБанк»</span> (далее — Кредитор) в лице Генерального директора Близнюка Станислава Викторовича, действующего на основании Устава, с одной стороны и <span id="preview-borrower-name">—</span> (далее — Заемщик), с другой стороны, совместно именуемые «Стороны», заключили настоящий Договор о нижеследующем:
+                                </div>
+                                <br>
+                                <div class="preview-line" style="font-weight: 600; text-align: center;">1. Предмет Договора</div>
+                                <div class="preview-line">1.1. Кредитор передает Заемщику денежные средства в размере <span id="preview-amount">—</span> руб. (далее — Кредит), а Заемщик обязуется вернуть Кредитору Кредит и уплатить проценты по нему в порядке, установленном Договором, и в сроки, установленные Договором.</div>
+                                <div class="preview-line">1.2. Заемщик выплачивает Кредитору проценты за пользование Кредитом в размере, установленном Договором.</div>
+                                <div class="preview-line">1.3. Кредитор по своему выбору передает Кредит наличными или переводит на расчетный счет Заемщика.</div>
+                                <br>
+                                <div class="preview-line" style="font-weight: 600; text-align: center;">2. Срок действия Договора</div>
+                                <div class="preview-line">2.1. Договор вступает в силу со дня его подписания обеими сторонами и действует до полного выполнения ими обязательств по Договору.</div>
+                                <div class="preview-line">2.2. Любая из Сторон вправе в одностороннем порядке расторгнуть Договор по письменному требованию. Об этом нужно письменно уведомить другую Сторону не менее чем за один месяц до даты расторжения Договора.</div>
+                                <br>
+                                <div class="preview-line" style="font-weight: 600; text-align: center;">3. Порядок расчетов</div>
+                                <div class="preview-line">3.1. Заемщик возвращает Кредит в срок, установленный Договором, Кредитору в той форме, в которой получил его.</div>
+                                <div class="preview-line">3.2. Заемщик ежемесячно не позднее 10-го числа каждого месяца перечисляет Кредитору платеж по Кредиту в суммах, указанных в приложении № 1 к Договору.</div>
+                                <div class="preview-line">3.3. Кредит может быть возвращен досрочно полностью или по частям. Заемщик письменно уведомляет Кредитора минимум за 10 дней о досрочном погашении Кредита.</div>
+                                <br>
+                                <div class="preview-line" style="font-weight: 600; text-align: center;">4. Ответственность Сторон</div>
+                                <div class="preview-line">4.1. За неисполнение или ненадлежащее исполнение обязательств по настоящему Договору Стороны несут ответственность в соответствии с действующим законодательством Российской Федерации.</div>
+                                <div class="preview-line">4.2. В случае просрочки платежа Заемщик уплачивает Кредитору пеню в размере 0,1% от суммы просроченного платежа за каждый день просрочки.</div>
+                            </div>
+                            <div class="preview-signatures">
+                                <div class="signature-block">
+                                    <div class="signature-label">Кредитор:</div>
+                                    <div class="signature-line">АО «ТБанк»</div>
+                                    <div class="signature-line">Подпись _______________</div>
+                                </div>
+                                <div class="signature-block">
+                                    <div class="signature-label">Заемщик:</div>
+                                    <div class="signature-line" id="preview-borrower-signature">—</div>
+                                    <div class="signature-line">Подпись _______________</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="right-column">
+                    <!-- Document Status -->
+                    <div class="card sidebar-card">
+                        <div class="card-header">
+                            <div class="card-title">Статус документа</div>
+                        </div>
+                        <div class="status-icon">✓</div>
+                        <div class="status-text">Готов к формированию</div>
+                        <div class="status-details">
+                            <div class="status-detail">
+                                <span class="status-detail-label">Номер договора</span>
+                                <span class="status-detail-value">placeholder</span>
+                            </div>
+                            <div class="status-detail">
+                                <span class="status-detail-label">Дата создания</span>
+                                <span class="status-detail-value">placeholder</span>
+                            </div>
+                            <div class="status-detail">
+                                <span class="status-detail-label">Создал</span>
+                                <span class="status-detail-value">placeholder</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Credit Summary -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Сводка по кредиту</div>
+                        </div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Продукт</span>
+                                <span class="summary-value">placeholder</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Сумма</span>
+                                <span class="summary-value">placeholder</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Срок</span>
+                                <span class="summary-value">placeholder</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Ставка</span>
+                                <span class="summary-value">placeholder</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Тип платежа</span>
+                                <span class="summary-value">placeholder</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Обеспечение</span>
+                                <span class="summary-value">placeholder</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Действия</div>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn-action primary" onclick="showConfirmDialog()">
+                                <span>📄</span> Сформировать договор
+                            </button>
+                            <a href="/payment-schedule" class="btn-action secondary" style="text-decoration: none;">
+                                <span>📅</span> График платежей
+                            </a>
+                            <button class="btn-action secondary" onclick="downloadContractPDF()">
+                                <span>📥</span> Скачать PDF
+                            </button>
+                            <button class="btn-action secondary" onclick="window.print()">
+                                <span>🖨</span> Печать
+                            </button>
+                            <button class="btn-action secondary" onclick="sendToClient()">
+                                <span>✉</span> Отправить клиенту
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Checklist -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Проверка готовности</div>
+                        </div>
+                        <div class="checklist">
+                            <div class="checklist-item">
+                                <span class="checklist-icon">✓</span>
+                                <span class="checklist-text">Основные параметры заполнены</span>
+                            </div>
+                            <div class="checklist-item">
+                                <span class="checklist-icon">✓</span>
+                                <span class="checklist-text">Данные сторон указаны</span>
+                            </div>
+                            <div class="checklist-item">
+                                <span class="checklist-icon">✓</span>
+                                <span class="checklist-text">Условия кредита определены</span>
+                            </div>
+                            <div class="checklist-item">
+                                <span class="checklist-icon">✓</span>
+                                <span class="checklist-text">Обеспечение указано</span>
+                            </div>
+                            <div class="checklist-item">
+                                <span class="checklist-icon">✓</span>
+                                <span class="checklist-text">Документ проверен</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirm-dialog" class="hidden">
+        <div class="dialog-overlay" onclick="hideConfirmDialog(event)">
+            <div class="dialog-content" onclick="event.stopPropagation()">
+                <div class="dialog-title">Подтверждение формирования договора</div>
+                <div class="dialog-body">
+                    <div>Будут сформированы следующие документы:</div>
+                    <div class="dialog-list">
+                        <div class="dialog-list-item">
+                            <span>📄</span>
+                            <span>Кредитный договор (основной документ)</span>
+                        </div>
+                        <div class="dialog-list-item">
+                            <span>📋</span>
+                            <span>График погашения кредита</span>
+                        </div>
+                        <div class="dialog-list-item">
+                            <span>📝</span>
+                            <span>Акт приема-передачи денежных средств</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-actions">
+                    <button class="btn-dialog cancel" onclick="hideConfirmDialog()">Отменить</button>
+                    <button class="btn-dialog confirm" disabled>Сформировать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let token = null;
+        let applicationId = null;
+        let loanParams = null;
+        let applicationData = null;
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function getContractNumber(appId) {
+            // Extract number part from app ID like "ПК-14556677-19-19" → "14556677-19-19"
+            if (!appId) return '000000';
+            const dashIndex = appId.indexOf('-');
+            if (dashIndex === -1) return appId;
+            return appId.slice(dashIndex + 1);
+        }
+
+        function formatMoney(value) {
+            return Number(value).toLocaleString('ru-RU') + ' ₽';
+        }
+
+        function monthWord(n) {
+            const rem = n % 100;
+            if (rem >= 11 && rem <= 14) return 'месяцев';
+            const last = n % 10;
+            if (last === 1) return 'месяц';
+            if (last >= 2 && last <= 4) return 'месяца';
+            return 'месяцев';
+        }
+
+        // Load application data from API
+        async function loadApplicationData() {
+            applicationId = getQueryParam('application_id');
+            if (!applicationId) {
+                console.log('No application_id, loading from localStorage');
+                loadFromLocalStorage();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/applications/${applicationId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const result = await response.json();
+                // API returns { application: {...}, credit_type_text: "..." }
+                const data = result.application || result;
+                if (data && data.id) {
+                    applicationData = data;
+                    populateBorrowerData(data);
+                    populateContractData(data);
+                    populatePreview(data);
+                    console.log('Contract page: application data loaded successfully');
+                } else {
+                    console.warn('Contract page: empty application data, using localStorage');
+                    loadFromLocalStorage();
+                }
+            } catch (err) {
+                console.error('Failed to load application data:', err);
+                loadFromLocalStorage();
+            }
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('selectedLoanParams');
+            if (saved) {
+                try {
+                    const params = JSON.parse(saved);
+                    if (params.applicationId && !applicationId) {
+                        applicationId = params.applicationId;
+                    }
+                    // If we have saved params but no app data, use what we can
+                    if (!applicationData) {
+                        populateContractDataFromParams(params);
+                        populatePreviewFromParams(params);
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        }
+
+        function populateBorrowerData(app) {
+            // Full name
+            const fullName = app.client_name || app.full_name || '';
+            setValue('borrower-fullname', fullName);
+
+            // Birth date
+            if (app.birth_date) {
+                const birthDate = new Date(app.birth_date).toISOString().split('T')[0];
+                setValue('borrower-birthdate', birthDate);
+            }
+
+            // Birth place — not in model, leave empty
+            setValue('borrower-birthplace', '');
+
+            // Passport
+            setValue('borrower-passport-series', app.passport_series || '');
+            setValue('borrower-passport-number', app.passport_number || '');
+            if (app.passport_issue_date) {
+                const issueDate = new Date(app.passport_issue_date).toISOString().split('T')[0];
+                setValue('borrower-passport-date', issueDate);
+            }
+
+            // Address
+            setValue('borrower-address', app.registration_address || app.residence_address || '');
+
+            // Phone & Email
+            setValue('borrower-phone', app.phone || '');
+            setValue('borrower-email', app.email || '');
+        }
+
+        function populateContractData(app) {
+            // Contract number - use app ID without prefix letters: ПК-14556677-19-19 → 14556677-19-19
+            const contractNum = getContractNumber(app.id);
+            setValue('contract-number', contractNum);
+
+            // Contract date — today
+            const today = new Date().toISOString().split('T')[0];
+            setValue('contract-date', today);
+
+            // Loan parameters from URL/localStorage
+            if (loanParams) {
+                const amount = loanParams.amount || app.requested_amount || 0;
+                const term = loanParams.term || app.credit_term || 0;
+                const rate = loanParams.rate || 14;
+                const type = loanParams.type || 'annuity';
+
+                setValue('contract-product-type', getProductTypeName(app.credit_type));
+                setValue('contract-product-name', loanParams.productName || getProductName(app.credit_type));
+                setValue('contract-amount', formatMoney(Math.round(amount)));
+                setValue('contract-term', `${term} ${monthWord(term)}`);
+                setValue('contract-rate', `${rate}%`);
+
+                // Calculate and set payment values
+                calculateAndSetResults(amount, term, rate, type);
+            }
+        }
+
+        function populateContractDataFromParams(params) {
+            const amount = params.selectedAmount || params.amount || 0;
+            const term = params.selectedTerm || params.term || 0;
+            const rate = params.selectedRate || params.rate || 14;
+            const type = params.selectedPaymentType || params.paymentType || 'annuity';
+
+            const contractNum = params.applicationId ? getContractNumber(params.applicationId) : '000000';
+            setValue('contract-number', contractNum);
+            setValue('contract-date', new Date().toISOString().split('T')[0]);
+            setValue('contract-product-type', getProductTypeName(''));
+            setValue('contract-product-name', params.productName || '—');
+            setValue('contract-amount', formatMoney(Math.round(amount)));
+            setValue('contract-term', `${term} ${monthWord(term)}`);
+            setValue('contract-rate', `${rate}%`);
+
+            calculateAndSetResults(amount, term, rate, type);
+        }
+
+        function populatePreview(app) {
+            const fullName = app.client_name || app.full_name || '—';
+            const amount = loanParams ? loanParams.amount : (app.requested_amount || 0);
+            const term = loanParams ? loanParams.term : (app.credit_term || 0);
+            const rate = loanParams ? loanParams.rate : 14;
+            const type = loanParams ? loanParams.type : 'annuity';
+            const contractNum = document.getElementById('contract-number').value || getContractNumber(app.id);
+
+            // Update preview
+            document.getElementById('preview-contract-title').textContent = `КРЕДИТНЫЙ ДОГОВОР № ${contractNum}`;
+            document.getElementById('preview-borrower-name').textContent = fullName;
+            const amountEl = document.getElementById('preview-amount');
+            const amount2El = document.getElementById('preview-amount-2');
+            const termEl = document.getElementById('preview-term');
+            const rateEl = document.getElementById('preview-rate');
+
+            if (amountEl) amountEl.textContent = formatMoney(Math.round(amount));
+            if (amount2El) amount2El.textContent = formatMoney(Math.round(amount));
+            if (termEl) termEl.textContent = `${term} ${monthWord(term)}`;
+            if (rateEl) rateEl.textContent = `${rate}`;
+            document.getElementById('preview-payment-type').textContent = type === 'annuity' ? 'аннуитетными' : 'дифференцированными';
+            document.getElementById('preview-borrower-signature').textContent = fullName;
+
+            // Update status card (Статус документа)
+            const statusDetails = document.querySelectorAll('.status-detail-value');
+            if (statusDetails.length >= 3) {
+                statusDetails[0].textContent = contractNum;
+                statusDetails[1].textContent = new Date().toLocaleDateString('ru-RU');
+                statusDetails[2].textContent = 'Кредитный аналитик';
+            }
+
+            // Update credit summary (Сводка по кредиту)
+            updateCreditSummary(app);
+        }
+
+        function populatePreviewFromParams(params) {
+            const amount = params.selectedAmount || params.amount || 0;
+            const term = params.selectedTerm || params.term || 0;
+            const rate = params.selectedRate || params.rate || 14;
+            const type = params.selectedPaymentType || params.paymentType || 'annuity';
+            const contractNum = document.getElementById('contract-number').value || (params.applicationId ? getContractNumber(params.applicationId) : '—');
+
+            document.getElementById('preview-contract-title').textContent = `КРЕДИТНЫЙ ДОГОВОР № ${contractNum}`;
+            document.getElementById('preview-borrower-name').textContent = '—';
+            const amountEl = document.getElementById('preview-amount');
+            const amount2El = document.getElementById('preview-amount-2');
+            const termEl = document.getElementById('preview-term');
+            const rateEl = document.getElementById('preview-rate');
+
+            if (amountEl) amountEl.textContent = formatMoney(Math.round(amount));
+            if (amount2El) amount2El.textContent = formatMoney(Math.round(amount));
+            if (termEl) termEl.textContent = `${term} ${monthWord(term)}`;
+            if (rateEl) rateEl.textContent = `${rate}`;
+            document.getElementById('preview-payment-type').textContent = type === 'annuity' ? 'аннуитетными' : 'дифференцированными';
+            document.getElementById('preview-borrower-signature').textContent = '—';
+
+            // Update status card
+            const statusDetails = document.querySelectorAll('.status-detail-value');
+            if (statusDetails.length >= 3) {
+                statusDetails[0].textContent = contractNum;
+                statusDetails[1].textContent = new Date().toLocaleDateString('ru-RU');
+                statusDetails[2].textContent = 'Кредитный аналитик';
+            }
+        }
+
+        function updateCreditSummary(app) {
+            const summaryGrid = document.querySelector('.card:nth-child(2) .summary-grid');
+            if (!summaryGrid) return;
+
+            const type = loanParams ? (loanParams.type || 'annuity') : 'annuity';
+            const typeText = type === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
+            const amount = loanParams ? (loanParams.amount || 0) : (app.requested_amount || 0);
+            const term = loanParams ? (loanParams.term || 0) : (app.credit_term || 0);
+            const rate = loanParams ? (loanParams.rate || 0) : 14;
+            const productName = loanParams ? (loanParams.productName || '—') : getProductTypeName(app.credit_type);
+
+            summaryGrid.innerHTML = `
+                <div class="summary-item"><span class="summary-label">Продукт</span><span class="summary-value">${productName}</span></div>
+                <div class="summary-item"><span class="summary-label">Сумма</span><span class="summary-value">${formatMoney(Math.round(amount))}</span></div>
+                <div class="summary-item"><span class="summary-label">Срок</span><span class="summary-value">${term} мес</span></div>
+                <div class="summary-item"><span class="summary-label">Ставка</span><span class="summary-value">${rate}%</span></div>
+                <div class="summary-item"><span class="summary-label">Тип платежа</span><span class="summary-value">${typeText}</span></div>
+                <div class="summary-item"><span class="summary-label">Клиент</span><span class="summary-value">${app.client_name || app.full_name || '—'}</span></div>
+            `;
+        }
+
+        function calculateAndSetResults(amount, term, rate, type) {
+            const loanAmount = amount - (loanParams.selectedDownPayment || 0);
+            const monthlyRate = rate / 100 / 12;
+
+            let monthlyPayment, totalPayment;
+            if (type === 'annuity') {
+                monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, term)) / (Math.pow(1 + monthlyRate, term) - 1);
+                totalPayment = monthlyPayment * term;
+            } else {
+                const principalPart = loanAmount / term;
+                let balance = loanAmount;
+                totalPayment = 0;
+                for (let i = 0; i < term; i++) {
+                    totalPayment += principalPart + balance * monthlyRate;
+                    balance -= principalPart;
+                }
+                monthlyPayment = totalPayment / term; // average
+            }
+
+            const overpayment = totalPayment - loanAmount;
+
+            document.getElementById('calc-monthly').textContent = formatMoney(Math.round(monthlyPayment));
+            document.getElementById('calc-total').textContent = formatMoney(Math.round(totalPayment));
+            document.getElementById('calc-overpayment').textContent = formatMoney(Math.round(overpayment));
+        }
+
+        function setValue(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.value = value;
+        }
+
+        function getProductTypeName(creditType) {
+            const map = {
+                'АК': 'Автокредит',
+                'ПК': 'Потребительский кредит',
+                'ИП': 'Ипотека',
+                'КК': 'Кредитная карта',
+                'БК': 'Бизнес-кредит'
+            };
+            return map[creditType] || 'Кредит';
+        }
+
+        function getProductName(creditType) {
+            const map = {
+                'АК': 'Автокредит «Оптимальный»',
+                'ПК': 'Потребительский «Стандарт»',
+                'ИП': 'Ипотека «Семейная»',
+                'КК': 'Кредитная карта «100 дней»',
+                'БК': 'Бизнес-кредит «Старт»'
+            };
+            return map[creditType] || 'Кредитный продукт';
+        }
+
+        function downloadContractPDF() {
+            const appId = applicationId || getQueryParam('application_id');
+            if (!appId) {
+                alert('ID заявки не указан. Невозможно сформировать документ.');
+                return;
+            }
+
+            const amount = loanParams ? Math.round(loanParams.amount) : 500000;
+            const term = loanParams ? loanParams.term : 24;
+            const rate = loanParams ? loanParams.rate : 14;
+            const contractNumber = document.getElementById('contract-number').value || (appId ? getContractNumber(appId) : '000000');
+            const contractDate = document.getElementById('contract-date').value || new Date().toISOString().split('T')[0];
+
+            const url = `${API_URL}/api/documents/${appId}/contract-pdf?loan_amount=${amount}&loan_term=${term}&interest_rate=${rate}&contract_number=${encodeURIComponent(contractNumber)}&contract_date=${contractDate}`;
+
+            // Simple approach: open directly with auth via fetch -> blob
+            fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(text || 'Ошибка загрузки PDF');
+                    });
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                if (blob.type === 'application/json') {
+                    // Server returned an error as JSON
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const err = JSON.parse(reader.result);
+                            alert('Ошибка: ' + (err.error || 'Не удалось создать PDF'));
+                        } catch(e) {
+                            alert('Ошибка при создании PDF');
+                        }
+                    };
+                    reader.readAsText(blob);
+                    return;
+                }
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = `contract_${appId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(blobUrl);
+                document.body.removeChild(a);
+            })
+            .catch(err => {
+                console.error('PDF download error:', err);
+                alert('Не удалось скачать PDF: ' + err.message);
+            });
+        }
+
+        function sendToClient() {
+            const appId = applicationId || getQueryParam('application_id');
+            if (!appId) {
+                alert('ID заявки не указан.');
+                return;
+            }
+
+            fetch(`${API_URL}/api/documents/${appId}/send-to-client`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message || 'Документы отправлены клиенту');
+            })
+            .catch(err => {
+                alert('Ошибка отправки: ' + err.message);
+            });
+        }
+
+        function checkAuth() {
+            token = localStorage.getItem('adminToken');
+            if (token) {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('main-section').classList.remove('hidden');
+                
+                // Update links with application_id
+                applicationId = getQueryParam('application_id');
+                
+                // Load loan parameters from URL first
+                const urlAmount = getQueryParam('amount');
+                if (urlAmount) {
+                    loanParams = {
+                        amount: parseFloat(urlAmount),
+                        term: parseInt(getQueryParam('term')) || 24,
+                        rate: parseFloat(getQueryParam('rate')) || 14,
+                        type: getQueryParam('type') || 'annuity',
+                        productName: getQueryParam('product') || '',
+                        selectedDownPayment: 0
+                    };
+                }
+                
+                if (applicationId) {
+                    document.querySelectorAll('a[href="/payment-schedule"]').forEach(link => {
+                        link.href = `/payment-schedule?application_id=${applicationId}`;
+                    });
+                }
+                
+                // Load application data and populate
+                loadApplicationData();
+            } else {
+                document.getElementById('login-section').classList.remove('hidden');
+                document.getElementById('main-section').classList.add('hidden');
+            }
+        }
+
+        function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            fetch(API_URL + '/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.token) {
+                    localStorage.setItem('adminToken', data.token);
+                    token = data.token;
+                    checkAuth();
+                } else {
+                    const errorEl = document.getElementById('login-error');
+                    errorEl.textContent = data.error || 'Ошибка авторизации';
+                    errorEl.classList.remove('hidden');
+                }
+            })
+            .catch(err => {
+                const errorEl = document.getElementById('login-error');
+                errorEl.textContent = 'Ошибка подключения к серверу';
+                errorEl.classList.remove('hidden');
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('selectedRole');
+            token = null;
+            checkAuth();
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.closest('.tab-btn').classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        function showConfirmDialog() {
+            document.getElementById('confirm-dialog').classList.remove('hidden');
+        }
+
+        function hideConfirmDialog(e) {
+            if (!e || e.target === document.querySelector('.dialog-overlay')) {
+                document.getElementById('confirm-dialog').classList.add('hidden');
+            }
+        }
+
+        // Initialize
+        window.onload = function() {
+            checkAuth();
+        };
+    </script>
+</body>
+</html>
