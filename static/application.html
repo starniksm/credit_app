@@ -1,0 +1,1819 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit App - Детальный просмотр заявки</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; min-height: 100vh; padding-bottom: 120px; }
+        
+        /* Header Styles */
+        .page-header { background: white; border-bottom: 1px solid #e0e0e0; padding: 20px 30px; position: sticky; top: 0; z-index: 100; }
+        .header-content { max-width: 1400px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+        .back-btn { display: flex; align-items: center; gap: 8px; color: #555; text-decoration: none; font-size: 14px; padding: 8px 16px; border-radius: 8px; background: #f5f5f5; border: none; cursor: pointer; transition: all 0.2s; }
+        .back-btn:hover { background: #e8e8e8; }
+        .back-btn svg { width: 18px; height: 18px; }
+        .header-main { flex: 1; }
+        .header-top { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; flex-wrap: wrap; }
+        .app-id-title { font-size: 28px; font-weight: 700; color: #1a1a1a; }
+        .status-badge { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .status-badge.new { background: #e3f2fd; color: #1976d2; border: 1px solid #90caf9; }
+        .status-badge.in_review { background: #fff8e1; color: #f57c00; border: 1px solid #ffcc80; }
+        .status-badge.approved { background: #e8f5e9; color: #388e3c; border: 1px solid #a5d6a7; }
+        .status-badge.rejected { background: #ffebee; color: #d32f2f; border: 1px solid #ef9a9a; }
+        .status-badge.revision { background: #fff3e0; color: #e65100; border: 1px solid #ffb74d; }
+        .priority-badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .priority-badge.high { background: #ffebee; color: #c62828; }
+        .priority-badge.medium { background: #fff8e1; color: #f57f17; }
+        .priority-badge.low { background: #e8f5e9; color: #2e7d32; }
+        .header-meta { display: flex; gap: 20px; color: #666; font-size: 14px; flex-wrap: wrap; }
+        .header-meta span { display: flex; align-items: center; gap: 6px; }
+        
+        /* Tabs */
+        .tabs-container { max-width: 1400px; margin: 0 auto; padding: 20px 30px; }
+        .tabs-nav { display: flex; gap: 5px; background: white; padding: 8px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-btn { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; transition: all 0.2s; flex: 1; justify-content: center; }
+        .tab-btn:hover { background: #f5f5f5; }
+        .tab-btn.active { background: #1976d2; color: white; }
+        .tab-btn svg { width: 20px; height: 20px; }
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Cards */
+        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .card-header svg { width: 24px; height: 24px; color: #1976d2; }
+        .card-header h3 { font-size: 18px; font-weight: 600; color: #1a1a1a; }
+        
+        /* Info Grid */
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .info-section { background: #fafafa; border-radius: 8px; padding: 16px; }
+        .info-section h4 { font-size: 14px; font-weight: 600; color: #1976d2; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #666; font-size: 13px; }
+        .info-value { font-weight: 500; color: #1a1a1a; font-size: 13px; text-align: right; }
+        
+        /* BKI Styles */
+        .credit-score { display: flex; align-items: center; gap: 20px; padding: 20px; background: #f5f5f5; border-radius: 12px; margin-bottom: 20px; }
+        .score-circle { width: 100px; height: 100px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 28px; color: white; }
+        .score-circle.high { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+        .score-circle.medium { background: linear-gradient(135deg, #ffc107, #ff9800); }
+        .score-circle.low { background: linear-gradient(135deg, #f44336, #c62828); }
+        .score-circle span { font-size: 12px; font-weight: 400; opacity: 0.9; }
+        .score-info h4 { font-size: 18px; margin-bottom: 8px; }
+        .score-info p { color: #666; font-size: 14px; }
+        
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-item { background: #f5f5f5; padding: 16px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 24px; font-weight: 700; color: #1976d2; }
+        .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+        
+        /* Table */
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .data-table th, .data-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+        .data-table th { background: #f5f5f5; font-weight: 600; color: #555; }
+        .data-table tr:hover { background: #fafafa; }
+        .payment-status { padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+        .payment-status.ok { background: #e8f5e9; color: #2e7d32; }
+        .payment-status.delayed { background: #fff8e1; color: #f57f17; }
+        .payment-status.critical { background: #ffebee; color: #c62828; }
+        
+        /* Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        .spinner circle {
+            animation: spinner-dash 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes spinner-dash {
+            0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+            50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+            100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+        }
+        
+        /* Notifications */
+        .notification {
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .notification.success {
+            background: #4caf50;
+        }
+        
+        .notification.error {
+            background: #f44336;
+        }
+        
+        .notification.warning {
+            background: #ff9800;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Risk Assessment */
+        .risk-assessment { display: grid; grid-template-columns: 200px 1fr; gap: 30px; align-items: start; }
+        .risk-chart { text-align: center; }
+        .risk-percent { font-size: 48px; font-weight: 700; margin-bottom: 10px; }
+        .risk-percent.low { color: #4caf50; }
+        .risk-percent.medium { color: #ff9800; }
+        .risk-percent.high { color: #f44336; }
+        .risk-label { font-size: 14px; color: #666; }
+        .risk-details { display: flex; flex-direction: column; gap: 15px; }
+        .risk-factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .factor-item { display: flex; align-items: center; gap: 10px; padding: 10px 15px; background: #f5f5f5; border-radius: 8px; }
+        .factor-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+        .factor-item.positive { background: #e8f5e9; }
+        .factor-item.negative { background: #ffebee; }
+        .factor-item.warning { background: #fff8e1; }
+        
+        /* Recommendation Box */
+        .recommendation-box { padding: 24px; border-radius: 12px; text-align: center; margin: 20px 0; }
+        .recommendation-box.approve { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border: 2px solid #4caf50; }
+        .recommendation-box.reject { background: linear-gradient(135deg, #ffebee, #ffcdd2); border: 2px solid #f44336; }
+        .recommendation-box.review { background: linear-gradient(135deg, #fff8e1, #ffecb3); border: 2px solid #ff9800; }
+        .recommendation-text { font-size: 28px; font-weight: 700; margin-bottom: 10px; }
+        .recommendation-box.approve .recommendation-text { color: #2e7d32; }
+        .recommendation-box.reject .recommendation-text { color: #c62828; }
+        .recommendation-box.review .recommendation-text { color: #e65100; }
+        .recommendation-comment { font-size: 14px; color: #666; line-height: 1.6; }
+        
+        /* Factors List */
+        .factors-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .factor-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; }
+        .factor-card.good { background: #e8f5e9; }
+        .factor-card.bad { background: #ffebee; }
+        .factor-card.neutral { background: #f5f5f5; }
+        .factor-score { font-weight: 700; font-size: 16px; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .factor-score.good { background: #4caf50; color: white; }
+        .factor-score.bad { background: #f44336; color: white; }
+        .factor-score.neutral { background: #ff9800; color: white; }
+        .factor-name { font-size: 13px; color: #555; }
+        
+        /* Timeline */
+        .timeline { position: relative; padding-left: 30px; }
+        .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e0e0e0; }
+        .timeline-item { position: relative; padding-bottom: 25px; }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-dot { position: absolute; left: -25px; width: 16px; height: 16px; border-radius: 50%; background: #1976d2; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .timeline-item.system .timeline-dot { background: #9c27b0; }
+        .timeline-item.analyst .timeline-dot { background: #1976d2; }
+        .timeline-item.auto .timeline-dot { background: #4caf50; }
+        .timeline-content { background: #fafafa; padding: 15px; border-radius: 8px; }
+        .timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px; }
+        .timeline-action { font-weight: 600; color: #1a1a1a; }
+        .timeline-author { font-size: 12px; color: #666; padding: 3px 10px; background: #e8e8e8; border-radius: 10px; }
+        .timeline-date { font-size: 12px; color: #999; }
+        .timeline-comment { font-size: 13px; color: #555; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
+        
+        /* Decision Panel */
+        .decision-panel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 20px 30px; box-shadow: 0 -4px 20px rgba(0,0,0,0.1); display: flex; justify-content: center; gap: 15px; z-index: 1000; }
+        .decision-btn { display: flex; align-items: center; gap: 10px; padding: 14px 28px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.2s; }
+        .decision-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .decision-btn.approve { background: linear-gradient(135deg, #4caf50, #2e7d32); color: white; }
+        .decision-btn.reject { background: linear-gradient(135deg, #f44336, #c62828); color: white; }
+        .decision-btn.documents { background: linear-gradient(135deg, #ff9800, #f57c00); color: white; }
+        .decision-btn svg { width: 20px; height: 20px; }
+        
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; animation: fadeIn 0.2s ease; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 16px; padding: 30px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .modal-header svg { width: 28px; height: 28px; }
+        .modal-header.approve svg { color: #4caf50; }
+        .modal-header.reject svg { color: #f44336; }
+        .modal-header.documents svg { color: #ff9800; }
+        .modal-header h2 { font-size: 20px; color: #1a1a1a; }
+        .modal-summary { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .modal-summary-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
+        .modal-summary-row span:first-child { color: #666; }
+        .modal-summary-row span:last-child { font-weight: 500; }
+        .modal-field { margin-bottom: 15px; }
+        .modal-field label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #333; }
+        .modal-field textarea, .modal-field select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; resize: vertical; min-height: 100px; }
+        .modal-field textarea:focus, .modal-field select:focus { outline: none; border-color: #1976d2; }
+        .modal-field .required { color: #f44336; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .modal-btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+        .modal-btn.cancel { background: #e8e8e8; color: #333; }
+        .modal-btn.cancel:hover { background: #d8d8d8; }
+        .modal-btn.confirm { background: #1976d2; color: white; }
+        .modal-btn.confirm:hover { background: #1565c0; }
+        .modal-btn.confirm.approve { background: #4caf50; }
+        .modal-btn.confirm.approve:hover { background: #43a047; }
+        .modal-btn.confirm.reject { background: #f44336; }
+        .modal-btn.confirm.reject:hover { background: #e53935; }
+        
+        /* Documents Checklist */
+        .checklist { display: flex; flex-direction: column; gap: 10px; }
+        .checklist-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f5f5f5; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .checklist-item:hover { background: #eee; }
+        .checklist-item input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+        .checklist-item.checked { background: #e8f5e9; }
+        .checklist-item.checked span { text-decoration: line-through; color: #666; }
+        
+        /* Notification */
+        .notification { position: fixed; top: 20px; right: 20px; padding: 16px 24px; border-radius: 8px; color: white; font-weight: 500; z-index: 3000; animation: slideIn 0.3s ease; display: none; }
+        .notification.show { display: block; }
+        .notification.success { background: #4caf50; }
+        .notification.error { background: #f44336; }
+        .notification.info { background: #1976d2; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        /* Loading & Error */
+        .loading, .error-page { text-align: center; padding: 60px 20px; }
+        .loading-spinner { width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top-color: #1976d2; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-page h2 { color: #f44336; margin-bottom: 10px; }
+        
+        /* BKI Empty State */
+        .bki-empty { text-align: center; padding: 60px 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .bki-empty-icon { width: 80px; height: 80px; margin: 0 auto 24px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .bki-empty-icon svg { width: 40px; height: 40px; color: #999; }
+        .bki-empty h3 { font-size: 20px; font-weight: 600; color: #1a1a1a; margin-bottom: 12px; }
+        .bki-empty p { font-size: 14px; color: #666; margin-bottom: 24px; line-height: 1.6; }
+        .bki-empty .bki-btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, #1976d2, #1565c0); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .bki-empty .bki-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3); }
+        .bki-empty .bki-btn svg { width: 20px; height: 20px; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .page-header { padding: 15px; }
+            .header-content { flex-direction: column; }
+            .header-top { flex-direction: column; align-items: flex-start; }
+            .app-id-title { font-size: 22px; }
+            .tabs-container { padding: 15px; }
+            .tab-btn { padding: 10px 15px; font-size: 13px; }
+            .tab-btn svg { width: 18px; height: 18px; }
+            .card { padding: 16px; }
+            .risk-assessment { grid-template-columns: 1fr; }
+            .credit-score { flex-direction: column; text-align: center; }
+            .decision-panel { padding: 15px; flex-wrap: wrap; }
+            .decision-btn { padding: 12px 20px; font-size: 14px; flex: 1; min-width: 140px; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="page-header" id="page-header">
+        <div class="header-content">
+            <button class="back-btn" onclick="goBack()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                Назад к списку заявок
+            </button>
+            <div class="header-main">
+                <div class="header-top">
+                    <h1 class="app-id-title" id="app-id-title">Загрузка...</h1>
+                    <span class="status-badge" id="status-badge">—</span>
+                    <span class="priority-badge" id="priority-badge">—</span>
+                </div>
+                <div class="header-meta">
+                    <span id="meta-created">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Создана: —
+                    </span>
+                    <span id="meta-analyst">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Аналитик: —
+                    </span>
+                    <span id="meta-amount">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                        Сумма: —
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Container -->
+    <div class="tabs-container" id="tabs-container">
+        <!-- Loading Indicator -->
+        <div id="loading-indicator" style="display:none;text-align:center;padding:40px;">
+            <div class="loading-spinner"></div>
+            <p style="color:#666;margin-top:20px;">Загрузка данных заявки...</p>
+        </div>
+        
+        <!-- Error Message -->
+        <div id="error-message" style="display:none;text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:20px;">
+        </div>
+        
+        <!-- Tab Navigation -->
+        <div class="tabs-nav">
+            <button class="tab-btn active" data-tab="client" onclick="switchTab('client')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                Анкета клиента
+            </button>
+            <button class="tab-btn" data-tab="bki" onclick="switchTab('bki')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                Данные БКИ
+            </button>
+            <button class="tab-btn" data-tab="ai" onclick="switchTab('ai')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                    <path d="M12 2a10 10 0 0 1 10 10"></path>
+                    <circle cx="12" cy="12" r="6"></circle>
+                </svg>
+                Рекомендации ИИ
+            </button>
+            <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                История действий
+            </button>
+        </div>
+
+        <!-- Tab 1: Client Form -->
+        <div class="tab-content active" id="tab-client">
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <h3>Персональные данные</h3>
+                </div>
+                <div class="info-grid" id="personal-data"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <h3>Адресная информация</h3>
+                </div>
+                <div class="info-grid" id="address-data"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                        <line x1="1" y1="10" x2="23" y2="10"></line>
+                    </svg>
+                    <h3>Данные кредита</h3>
+                </div>
+                <div class="info-grid" id="credit-data"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                    <h3>Занятость и доход</h3>
+                </div>
+                <div class="info-grid" id="employment-data"></div>
+            </div>
+        </div>
+
+        <!-- Tab 2: BKI Data -->
+        <div class="tab-content" id="tab-bki">
+            <!-- Empty State (shown when BKI data not loaded) -->
+            <div class="bki-empty" id="bki-empty-state">
+                <div class="bki-empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </div>
+                <h3>Данные не загружены</h3>
+                <p>Для продолжения анализа необходимо запросить данные из Бюро кредитных историй</p>
+                <button class="bki-btn" onclick="requestBKIData()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Запросить данные из БКИ
+                </button>
+            </div>
+            
+            <!-- BKI Data Container (shown when data is loaded) -->
+            <div id="bki-data-container" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                        <h3>Кредитный рейтинг</h3>
+                    </div>
+                    <div class="credit-score" id="credit-score"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        <h3>Общая статистика кредитной истории</h3>
+                    </div>
+                    <div class="stats-grid" id="bki-stats"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                        </svg>
+                        <h3>Действующие кредиты</h3>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Банк</th>
+                                <th>Тип кредита</th>
+                                <th>Сумма долга</th>
+                                <th>Ежемесячный платёж</th>
+                                <th>Статус платежей</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-credits"></tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <h3>История просрочек</h3>
+                    </div>
+                    <div class="info-grid" id="delinquency-data"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        <h3>Дополнительная информация</h3>
+                    </div>
+                    <div class="info-grid" id="bki-additional"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: AI Recommendations -->
+        <div class="tab-content" id="tab-ai">
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                        <path d="M12 2a10 10 0 0 1 10 10"></path>
+                        <circle cx="12" cy="12" r="6"></circle>
+                    </svg>
+                    <h3>Оценка рисков</h3>
+                </div>
+                <div class="risk-assessment" id="risk-assessment">
+                    <div class="risk-chart">
+                        <div class="risk-percent" id="risk-percent">0%</div>
+                        <div class="risk-label" id="risk-label">Низкий риск</div>
+                    </div>
+                    <div class="risk-details">
+                        <div class="risk-factors" id="risk-factors"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                    <h3>Рекомендации ИИ</h3>
+                </div>
+                <div class="recommendation-box" id="recommendation-box">
+                    <div class="bki-empty" style="padding: 20px; text-align: center;">
+                        <p>Рекомендация ИИ будет сформирована после завершения анализа</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    <h3>Факторы анализа</h3>
+                </div>
+                <div class="factors-grid" id="factors-analysis">
+                    <div class="bki-empty" style="padding: 20px; text-align: center;">
+                        <p>Факторы анализа будут доступны после формирования рекомендаций ИИ</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <h3>Комментарий ИИ</h3>
+                </div>
+                <div id="ai-comment">
+                    <div class="bki-empty" style="padding: 20px; text-align: center;">
+                        <p>Комментарий ИИ будет добавлен после завершения автоматического анализа</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 4: History -->
+        <div class="tab-content" id="tab-history">
+            <div class="card">
+                <div class="card-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <h3>История действий</h3>
+                </div>
+                <div class="timeline" id="timeline">
+                    <div class="bki-empty" style="padding: 20px; text-align: center;">
+                        <p>История действий будет отображаться здесь</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Decision Panel -->
+    <div class="decision-panel" id="decision-panel">
+        <button class="decision-btn approve" onclick="showApproveModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Одобрить
+        </button>
+        <button class="decision-btn reject" onclick="showRejectModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+            Отклонить
+        </button>
+        <button class="decision-btn documents" onclick="showDocumentsModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Запросить документы
+        </button>
+    </div>
+
+    <!-- Approve Modal -->
+    <div class="modal-overlay" id="approve-modal">
+        <div class="modal">
+            <div class="modal-header approve">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <h2>Одобрить заявку</h2>
+            </div>
+            <div class="modal-summary" id="summary-approve">
+                <div class="modal-summary-row"><span>Заявка</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Клиент</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Сумма</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Срок</span><span>— мес.</span></div>
+            </div>
+            <div class="modal-field">
+                <label>Комментарий <span class="required">*</span></label>
+                <textarea id="approve-comment" placeholder="Укажите комментарий к решению"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" onclick="hideModals()">Отмена</button>
+                <button class="modal-btn confirm approve" onclick="approveApplication()">Одобрить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Modal -->
+    <div class="modal-overlay" id="reject-modal">
+        <div class="modal">
+            <div class="modal-header reject">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+                <h2>Отклонить заявку</h2>
+            </div>
+            <div class="modal-summary" id="summary-reject">
+                <div class="modal-summary-row"><span>Заявка</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Клиент</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Сумма</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Срок</span><span>— мес.</span></div>
+            </div>
+            <div class="modal-field">
+                <label>Причина отклонения <span class="required">*</span></label>
+                <select id="reject-reason">
+                    <option value="">Выберите причину</option>
+                    <option value="low_income">Недостаточный доход</option>
+                    <option value="bad_credit_history">Плохая кредитная история</option>
+                    <option value="high_debt">Высокий уровень задолженности</option>
+                    <option value="insufficient_documents">Недостаточно документов</option>
+                    <option value="other">Другое</option>
+                </select>
+            </div>
+            <div class="modal-field">
+                <label>Комментарий</label>
+                <textarea id="reject-comment" placeholder="Дополнительный комментарий"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" onclick="hideModals()">Отмена</button>
+                <button class="modal-btn confirm reject" onclick="rejectApplication()">Отклонить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Documents Modal -->
+    <div class="modal-overlay" id="documents-modal">
+        <div class="modal">
+            <div class="modal-header documents">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                <h2>Запросить документы</h2>
+            </div>
+            <div class="modal-summary" id="summary-documents">
+                <div class="modal-summary-row"><span>Заявка</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Клиент</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Сумма</span><span>—</span></div>
+                <div class="modal-summary-row"><span>Срок</span><span>— мес.</span></div>
+            </div>
+            <div class="modal-field">
+                <label>Требуемые документы <span class="required">*</span></label>
+                <div class="checklist" id="documents-checklist">
+                    <div class="checklist-item">
+                        <input type="checkbox" id="doc1" value="passport_copy">
+                        <label for="doc1">Копия паспорта</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="doc2" value="income_statement">
+                        <label for="doc2">Справка о доходах (2-НДФЛ)</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="doc3" value="employment_letter">
+                        <label for="doc3">Трудовая книжка</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="doc4" value="bank_statements">
+                        <label for="doc4">Выписки по банковским счетам</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="doc5" value="property_documents">
+                        <label for="doc5">Документы на недвижимость</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="doc6" value="spouse_documents">
+                        <label for="doc6">Документы супруги/супруга</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>Комментарий</label>
+                <textarea id="documents-comment" placeholder="Дополнительный комментарий"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" onclick="hideModals()">Отмена</button>
+                <button class="modal-btn confirm documents" onclick="requestDocuments()">Запросить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // Global error handler
+        window.onerror = function(msg, url, line, col, error) {
+            alert('JS Error: ' + msg + '\nLine: ' + line);
+            return false;
+        };
+        
+        // Global variables
+        let appId = null;
+        let currentApp = null;
+
+        // Debug: Log when global functions are called
+        window.showApproveModal = function() {
+            console.log('showApproveModal called');
+            if (!currentApp) {
+                console.warn('currentApp is not set, loading application first');
+                loadApplication().then(() => {
+                    updateModalSummaries(currentApp);
+                    document.getElementById('approve-modal').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                });
+            } else {
+                updateModalSummaries(currentApp);
+                document.getElementById('approve-modal').classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        };
+
+        window.showRejectModal = function() {
+            console.log('showRejectModal called');
+            if (!currentApp) {
+                console.warn('currentApp is not set, loading application first');
+                loadApplication().then(() => {
+                    updateModalSummaries(currentApp);
+                    document.getElementById('reject-modal').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                });
+            } else {
+                updateModalSummaries(currentApp);
+                document.getElementById('reject-modal').classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        };
+
+        window.showDocumentsModal = function() {
+            console.log('showDocumentsModal called');
+            if (!currentApp) {
+                console.warn('currentApp is not set, loading application first');
+                loadApplication().then(() => {
+                    updateModalSummaries(currentApp);
+                    document.getElementById('documents-modal').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                });
+            } else {
+                updateModalSummaries(currentApp);
+                document.getElementById('documents-modal').classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        };
+
+        window.approveApplication = async function() {
+            console.log('approveApplication called');
+            const comment = getElement('approve-comment').value.trim();
+
+            if (!comment) {
+                showNotification('Комментарий обязателен', 'error');
+                return;
+            }
+
+            try {
+                const token = localStorage.getItem('adminToken');
+                console.log('Using token:', token ? 'present' : 'missing');
+                
+                const response = await fetch(`/api/admin/applications/${appId}/decision`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        decision: 'approved',
+                        comment: comment
+                    })
+                });
+
+                console.log('Response status:', response.status);
+                const result = await response.json();
+                console.log('Response data:', result);
+
+                if (response.ok) {
+                    showNotification('Заявка одобрена', 'success');
+                    hideModals();
+                    loadApplication();
+                } else {
+                    throw new Error(result.error || 'Ошибка одобрения заявки');
+                }
+            } catch (error) {
+                console.error('Error approving application:', error);
+                showNotification(error.message, 'error');
+            }
+        };
+
+        window.rejectApplication = async function() {
+            console.log('rejectApplication called');
+            const reason = getElement('reject-reason').value;
+            const comment = getElement('reject-comment').value.trim();
+
+            if (!reason) {
+                showNotification('Причина отклонения обязательна', 'error');
+                return;
+            }
+
+            try {
+                const token = localStorage.getItem('adminToken');
+                console.log('Using token:', token ? 'present' : 'missing');
+                
+                const response = await fetch(`/api/admin/applications/${appId}/decision`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        decision: 'rejected',
+                        reason: reason,
+                        comment: comment
+                    })
+                });
+
+                console.log('Response status:', response.status);
+                const result = await response.json();
+                console.log('Response data:', result);
+
+                if (response.ok) {
+                    showNotification('Заявка отклонена', 'success');
+                    hideModals();
+                    loadApplication();
+                } else {
+                    throw new Error(result.error || 'Ошибка отклонения заявки');
+                }
+            } catch (error) {
+                console.error('Error rejecting application:', error);
+                showNotification(error.message, 'error');
+            }
+        };
+
+        window.requestDocuments = async function() {
+            console.log('requestDocuments called');
+            const checkboxes = document.querySelectorAll('#documents-checklist input[type="checkbox"]:checked');
+            const documents = Array.from(checkboxes).map(cb => cb.value);
+            const comment = getElement('documents-comment').value.trim();
+
+            if (documents.length === 0) {
+                showNotification('Выберите хотя бы один документ', 'error');
+                return;
+            }
+
+            try {
+                const token = localStorage.getItem('adminToken');
+                console.log('Using token:', token ? 'present' : 'missing');
+                
+                const response = await fetch(`/api/admin/applications/${appId}/documents-request`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        documents: documents,
+                        comment: comment
+                    })
+                });
+
+                console.log('Response status:', response.status);
+                const result = await response.json();
+                console.log('Response data:', result);
+
+                if (response.ok) {
+                    showNotification('Запрос документов отправлен', 'success');
+                    hideModals();
+                    loadApplication();
+                } else {
+                    throw new Error(result.error || 'Ошибка запроса документов');
+                }
+            } catch (error) {
+                console.error('Error requesting documents:', error);
+                showNotification(error.message, 'error');
+            }
+        };
+
+        window.updateDecisionPanel = function(status) {
+            console.log('updateDecisionPanel called with:', status);
+            var panel = document.getElementById('decision-panel');
+            if (!panel) return;
+            if (status === 'approved' || status === 'rejected') {
+                panel.style.display = 'none';
+            } else {
+                panel.style.display = 'flex';
+            }
+        };
+
+        window.requestBKIData = async function() {
+            console.log('requestBKIData called');
+            try {
+                const token = localStorage.getItem('adminToken');
+                console.log('Using token:', token ? 'present' : 'missing');
+                
+                const response = await fetch(`/api/applications/${appId}/request-bki`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                console.log('Response status:', response.status);
+                const result = await response.json();
+                console.log('Response data:', result);
+
+                if (response.ok) {
+                    showNotification('Данные БКИ запрошены', 'success');
+                    loadApplication();
+                } else {
+                    throw new Error(result.error || 'Ошибка запроса данных БКИ');
+                }
+            } catch (error) {
+                console.error('Error requesting BKI data:', error);
+                showNotification(error.message, 'error');
+            }
+        };
+
+        window.switchTab = function(tabName) {
+            console.log('switchTab called with:', tabName);
+            // Update active tab button
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabName);
+            });
+
+            // Update active tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.toggle('active', content.id === 'tab-' + tabName);
+            });
+
+            // Update modal summaries when switching to history tab
+            if (tabName === 'history' && currentApp) {
+                updateModalSummaries(currentApp);
+            }
+        };
+
+        window.goBack = function() {
+            console.log('goBack called');
+            window.location.href = '/analyst';
+        };
+
+        window.hideModals = function() {
+            console.log('hideModals called');
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.classList.remove('active');
+            });
+            document.body.style.overflow = 'auto';
+        };
+
+        // DOM helpers
+        function getElement(id) {
+            const el = document.getElementById(id);
+            if (!el) console.log('Element not found:', id);
+            return el;
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            if (!amount) return '—';
+            return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
+        }
+
+        // Format date/time
+        function formatDateTime(dateString) {
+            if (!dateString) return '—';
+
+            // Handle Go timestamp format (2006-01-02 15:04:05) - parse manually
+            if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
+                var parts = dateString.split(/[- :]/);
+                var year = parseInt(parts[0]);
+                var month = parseInt(parts[1]) - 1;
+                var day = parseInt(parts[2]);
+                var hour = parseInt(parts[3]);
+                var minute = parseInt(parts[4]);
+                var seconds = parseInt(parts[5]);
+                // Create date in local timezone
+                var dateTimeObj = new Date(year, month, day, hour, minute, seconds);
+                return dateTimeObj.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            // Handle ISO format with T
+            if (typeof dateString === 'string' && dateString.includes('T')) {
+                var parsed = new Date(dateString);
+                if (!isNaN(parsed.getTime())) {
+                    return parsed.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            }
+
+            var dateTimeObj2 = new Date(dateString);
+            if (isNaN(dateTimeObj2.getTime())) return dateString;
+            return dateTimeObj2.toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            if (!dateString) return '—';
+
+            // Handle date-only strings (YYYY-MM-DD)
+            if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                var dateParts = dateString.split('-');
+                var dateYear = parseInt(dateParts[0]);
+                var dateMonth = parseInt(dateParts[1]) - 1;
+                var dateDay = parseInt(dateParts[2]);
+                var dateObj = new Date(dateYear, dateMonth, dateDay);
+                return dateObj.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+            }
+
+            var dateObj2 = new Date(dateString);
+            if (isNaN(dateObj2.getTime())) return dateString;
+            return dateObj2.toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        }
+
+        // Format phone
+        function formatPhone(phone) {
+            if (!phone) return '—';
+            return phone.replace(/(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})/, '+$1 ($2) $3-$4-$5');
+        }
+
+        // Format passport
+        function formatPassport(series, number) {
+            if (!series || !number) return '—';
+            return series + ' ' + number;
+        }
+
+        // Format employment experience
+        function formatExperience(years) {
+            if (!years) return '—';
+            const yearsNum = parseInt(years);
+            const lastDigit = yearsNum % 10;
+            let suffix = ' лет';
+            if (lastDigit === 1 && yearsNum !== 11) {
+                suffix = ' год';
+            } else if (lastDigit > 1 && lastDigit < 5 && (yearsNum < 10 || yearsNum > 20)) {
+                suffix = ' года';
+            }
+            return yearsNum + suffix;
+        }
+
+        // Get status text
+        function getStatusText(status) {
+            const statusMap = {
+                'new': 'Новая',
+                'in_review': 'В работе',
+                'approved': 'Одобрена',
+                'rejected': 'Отклонена',
+                'revision': 'На доработке'
+            };
+            return statusMap[status] || status;
+        }
+
+        // Get priority text
+        function getPriorityText(priority) {
+            const priorityMap = {
+                'low': 'Низкий',
+                'medium': 'Средний',
+                'high': 'Высокий'
+            };
+            return priorityMap[priority] || priority;
+        }
+
+        // Get priority class
+        function getPriorityClass(priority) {
+            const priorityMap = {
+                'low': 'low',
+                'medium': 'medium',
+                'high': 'high'
+            };
+            return priorityMap[priority] || 'medium';
+        }
+
+        // Get status class
+        function getStatusClass(status) {
+            const statusMap = {
+                'new': 'new',
+                'in_review': 'in_review',
+                'approved': 'approved',
+                'rejected': 'rejected',
+                'revision': 'revision'
+            };
+            return statusMap[status] || 'new';
+        }
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const notification = getElement('notification');
+            notification.textContent = message;
+            notification.className = 'notification ' + type + ' show';
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Debug info
+        function showDebug(msg) {
+            const debug = document.getElementById('debug-info');
+            if (debug) {
+                debug.innerHTML += '<div>' + new Date().toLocaleTimeString() + ' ' + msg + '</div>';
+                debug.scrollTop = debug.scrollHeight;
+            }
+        }
+
+        // Load application data
+        window.loadApplication = async function() {
+            console.log('loadApplication started');
+            
+            // Show visible loading indicator
+            var loadingEl = document.getElementById('loading-indicator');
+            var errorEl = document.getElementById('error-message');
+            if (loadingEl) loadingEl.style.display = 'block';
+            if (errorEl) errorEl.style.display = 'none';
+            
+            try {
+                var token = localStorage.getItem('adminToken');
+                console.log('Token:', token ? 'present' : 'missing');
+
+                if (!token) {
+                    console.log('No token, redirecting to login');
+                    window.location.href = '/?redirect=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
+
+                // Extract ID from URL path (/application/{id})
+                var pathParts = window.location.pathname.split('/');
+                appId = pathParts[pathParts.length - 1];
+                console.log('App ID from URL:', appId);
+
+                if (!appId || appId === 'application') {
+                    console.log('Invalid app ID, redirecting');
+                    window.location.href = '/analyst';
+                    return;
+                }
+
+                // Show loading state
+                var titleEl = document.getElementById('app-id-title');
+                if (titleEl) {
+                    titleEl.textContent = 'Загрузка...';
+                }
+
+                // Fetch application data
+                var url = '/api/applications/' + appId;
+                console.log('Fetching:', url);
+                var response = await fetch(url, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        console.log('Unauthorized, removing token');
+                        localStorage.removeItem('adminToken');
+                        window.location.href = '/?expired=true';
+                        return;
+                    }
+                    var errorText = await response.text();
+                    console.error('Response error:', errorText);
+                    throw new Error('Ошибка HTTP: ' + response.status + ' - ' + errorText);
+                }
+
+                var data = await response.json();
+
+                console.log('API Response:', data);
+                console.log('data.application exists:', data && data.application);
+
+                // API returns { application: {...}, credit_type_text: "..." }
+                if (data && data.application) {
+                    currentApp = data.application;
+                    console.log('Using data.application');
+                } else if (data && data.id) {
+                    currentApp = data;
+                    console.log('Using data directly');
+                } else {
+                    console.error('Unexpected API response format:', data);
+                    throw new Error('Неверный формат данных от API');
+                }
+
+                console.log('currentApp:', currentApp);
+
+                if (!currentApp || !currentApp.id) {
+                    throw new Error('Заявка не найдена');
+                }
+
+                // Update UI
+                if (titleEl) {
+                    titleEl.textContent = 'Заявка #' + currentApp.id;
+                    console.log('Updated title to:', titleEl.textContent);
+                }
+
+                console.log('Calling updateApplicationUI...');
+                try {
+                    updateApplicationUI();
+                    console.log('updateApplicationUI done');
+                } catch (e) {
+                    console.error('Error in updateApplicationUI:', e);
+                }
+
+                console.log('Calling renderClientTab...');
+                try {
+                    renderClientTab(currentApp);
+                    console.log('renderClientTab done');
+                } catch (e) {
+                    console.error('Error in renderClientTab:', e);
+                }
+
+                console.log('Calling renderBKITab...');
+                try {
+                    renderBKITab(currentApp);
+                    console.log('renderBKITab done');
+                } catch (e) {
+                    console.error('Error in renderBKITab:', e);
+                }
+
+                console.log('Calling renderAITab...');
+                try {
+                    renderAITab(currentApp);
+                    console.log('renderAITab done');
+                } catch (e) {
+                    console.error('Error in renderAITab:', e);
+                }
+
+                console.log('Calling renderHistoryTab...');
+                try {
+                    renderHistoryTab(currentApp);
+                    console.log('renderHistoryTab done');
+                } catch (e) {
+                    console.error('Error in renderHistoryTab:', e);
+                }
+
+                console.log('loadApplication completed successfully');
+                
+                // Hide loading indicator
+                if (loadingEl) loadingEl.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading application:', error);
+                
+                // Show error message on page
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (errorEl) {
+                    errorEl.innerHTML = '<h2 style="color:#d32f2f;">Ошибка загрузки</h2><p>' + error.message + '</p><p style="font-size:12px;color:#666;">Откройте консоль браузера (F12) для подробностей</p><a href="/analyst" style="background:#1976d2;color:white;padding:12px 24px;border-radius:5px;text-decoration:none;display:inline-block;margin-top:20px;">К списку заявок</a>';
+                    errorEl.style.display = 'block';
+                } else {
+                    // Fallback: replace body content
+                    document.body.innerHTML = '<div style="text-align:center;padding:50px;font-family:sans-serif;background:#f0f2f5;min-height:100vh;"><div style="background:white;padding:40px;border-radius:10px;max-width:400px;margin:50px auto;box-shadow:0 2px 10px rgba(0,0,0,0.1);"><h2 style="color:#d32f2f;">Ошибка загрузки</h2><p>' + error.message + '</p><a href="/analyst" style="background:#1976d2;color:white;padding:12px 24px;border-radius:5px;text-decoration:none;display:inline-block;margin-top:20px;">К списку заявок</a></div></div>';
+                }
+            }
+        }
+
+        // Update application UI
+        function updateApplicationUI() {
+            if (!currentApp) return;
+
+            // Update header
+            getElement('app-id-title').textContent = `Заявка #${currentApp.id}`;
+            getElement('status-badge').textContent = getStatusText(currentApp.status);
+            getElement('status-badge').className = `status-badge ${getStatusClass(currentApp.status)}`;
+            
+            const priorityClass = getPriorityClass(currentApp.priority);
+            getElement('priority-badge').textContent = getPriorityText(currentApp.priority);
+            getElement('priority-badge').className = `priority-badge ${priorityClass}`;
+            
+            getElement('meta-created').innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                Создана: ${formatDateTime(currentApp.created_at)}
+            `;
+            
+            getElement('meta-analyst').innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                Аналитик: ${currentApp.analyst_name || '—'}
+            `;
+            
+            getElement('meta-amount').innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                Сумма: ${formatCurrency(currentApp.requested_amount)}
+            `;
+
+            // Update decision panel visibility
+            updateDecisionPanel(currentApp.status);
+        }
+
+        // Render Client Tab
+        function renderClientTab(app) {
+            var personalDataEl = document.getElementById('personal-data');
+            var addressDataEl = document.getElementById('address-data');
+            var creditDataEl = document.getElementById('credit-data');
+            var employmentDataEl = document.getElementById('employment-data');
+
+            if (!personalDataEl) {
+                console.error('personal-data element not found');
+                return;
+            }
+
+            var name = app.full_name || app.client_name || 'Не указано';
+            personalDataEl.innerHTML = '<div class="info-row"><span class="info-label">ФИО</span><span class="info-value">' + name + '</span></div>' +
+                '<div class="info-row"><span class="info-label">Телефон</span><span class="info-value">' + (app.phone || '—') + '</span></div>' +
+                '<div class="info-row"><span class="info-label">Email</span><span class="info-value">' + (app.email || '—') + '</span></div>' +
+                '<div class="info-row"><span class="info-label">Дата рождения</span><span class="info-value">' + (app.birth_date || '—') + '</span></div>' +
+                '<div class="info-row"><span class="info-label">Возраст</span><span class="info-value">' + (app.age || '—') + '</span></div>' +
+                '<div class="info-row"><span class="info-label">Паспорт</span><span class="info-value">' + (app.passport_series || '') + ' ' + (app.passport_number || '') + '</span></div>';
+
+            if (addressDataEl) {
+                addressDataEl.innerHTML = '<div class="info-row"><span class="info-label">Адрес регистрации</span><span class="info-value">' + (app.registration_address || '—') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Адрес проживания</span><span class="info-value">' + (app.residence_address || '—') + '</span></div>';
+            }
+
+            if (creditDataEl) {
+                creditDataEl.innerHTML = '<div class="info-row"><span class="info-label">Тип кредита</span><span class="info-value">' + (app.credit_type || '—') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Цель кредита</span><span class="info-value">' + (app.credit_purpose || '—') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Сумма</span><span class="info-value">' + (app.requested_amount || '—') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Срок</span><span class="info-value">' + (app.credit_term || '—') + ' мес.</span></div>';
+            }
+
+            if (employmentDataEl) {
+                employmentDataEl.innerHTML = '<div class="info-row"><span class="info-label">Место работы</span><span class="info-value">' + (app.employer_name || '—') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Должность</span><span class="info-value">' + (app.position || '—') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Доход</span><span class="info-value">' + (app.monthly_income || '—') + '</span></div>';
+            }
+        }
+
+        // Render BKI Tab
+        function renderBKITab(app) {
+            // Check if we have BKI data
+            const hasBKIData = app.credit_score > 0 || app.total_credits > 0 || app.active_credits > 0;
+            
+            if (hasBKIData) {
+                // Show BKI data container and hide empty state
+                getElement('bki-empty-state').style.display = 'none';
+                getElement('bki-data-container').style.display = 'block';
+                
+                // Credit score
+                const scoreValue = app.credit_score || 0;
+                let scoreClass = 'low';
+                if (scoreValue >= 700) scoreClass = 'high';
+                else if (scoreValue >= 600) scoreClass = 'medium';
+                
+                getElement('credit-score').innerHTML = `
+                    <div class="score-circle ${scoreClass}">
+                        ${scoreValue}
+                        <span>Баллов</span>
+                    </div>
+                    <div class="score-info">
+                        <h4>Кредитный рейтинг</h4>
+                        <p>Кредитоспособность клиента: ${getScoreDescription(scoreValue)}</p>
+                    </div>
+                `;
+
+                // BKI stats
+                const bkiStats = [
+                    { label: 'Всего кредитов', value: app.total_credits || 0 },
+                    { label: 'Действующие', value: app.active_credits || 0 },
+                    { label: 'Закрытые', value: app.closed_credits || 0 },
+                    { label: 'Просрочки за 12 мес.', value: app.delayed_payments_12m || 0 },
+                    { label: 'Текущие просрочки', value: app.current_delinquencies ? 'Да' : 'Нет' },
+                    { label: 'Макс. просрочка', value: app.max_delinquency_days ? app.max_delinquency_days + ' дней' : '—' },
+                    { label: 'Общая задолженность', value: formatCurrency(app.total_debt || 0) },
+                    { label: 'Коэффициент DTI', value: app.dti_ratio ? (app.dti_ratio * 100).toFixed(1) + '%' : '—' }
+                ];
+
+                getElement('bki-stats').innerHTML = bkiStats.map(stat => `
+                    <div class="stat-item">
+                        <div class="stat-value">${stat.value}</div>
+                        <div class="stat-label">${stat.label}</div>
+                    </div>
+                `).join('');
+
+                // Active credits
+                const activeCredits = app.active_credits_list ? JSON.parse(app.active_credits_list) : [];
+                getElement('active-credits').innerHTML = activeCredits.map(credit => `
+                    <tr>
+                        <td>${credit.bank || '—'}</td>
+                        <td>${credit.type || '—'}</td>
+                        <td>${formatCurrency(credit.amount || credit.debt || 0)}</td>
+                        <td>${formatCurrency(credit.monthlyPayment || credit.monthly_payment || 0)}</td>
+                        <td><span class="payment-status ${getPaymentStatusClass(credit.payment_status || '')}">${getPaymentStatusText(credit.payment_status || '')}</span></td>
+                    </tr>
+                `).join('');
+
+                // Delinquency data
+                const delinquencyData = [
+                    { label: 'Просрочки за 12 мес.', value: app.delayed_payments_12m || 0 },
+                    { label: 'Макс. просрочка', value: app.max_delinquency_days ? app.max_delinquency_days + ' дней' : '—' },
+                    { label: 'Текущие просрочки', value: app.current_delinquencies ? 'Да' : 'Нет' },
+                    { label: 'История просрочек', value: app.delinquency_history || '—' }
+                ];
+
+                getElement('delinquency-data').innerHTML = delinquencyData.map(item => `
+                    <div class="info-section">
+                        <div class="info-row">
+                            <span class="info-label">${item.label}</span>
+                            <span class="info-value">${item.value}</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Additional BKI info
+                const additionalInfo = [
+                    { label: 'Доступный лимит', value: formatCurrency(app.available_credit_limit || 0) },
+                    { label: 'Коэффициент долговой нагрузки', value: app.debt_burden_ratio ? (app.debt_burden_ratio * 100).toFixed(1) + '%' : '—' },
+                    { label: 'Детали долговой нагрузки', value: app.debt_burden_details || '—' }
+                ];
+
+                getElement('bki-additional').innerHTML = additionalInfo.map(item => `
+                    <div class="info-section">
+                        <div class="info-row">
+                            <span class="info-label">${item.label}</span>
+                            <span class="info-value">${item.value}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                // Hide BKI data container and show empty state
+                getElement('bki-empty-state').style.display = 'block';
+                getElement('bki-data-container').style.display = 'none';
+            }
+        }
+
+        // Helper functions for BKI data
+        function getScoreDescription(score) {
+            if (score >= 700) return 'Высокая';
+            if (score >= 600) return 'Средняя';
+            return 'Низкая';
+        }
+
+        function getPaymentStatusClass(status) {
+            const statusMap = {
+                'ok': 'ok',
+                'delayed': 'delayed',
+                'critical': 'critical'
+            };
+            return statusMap[status.toLowerCase()] || 'ok';
+        }
+
+        function getPaymentStatusText(status) {
+            const statusMap = {
+                'ok': 'OK',
+                'delayed': 'Просрочка',
+                'critical': 'Критично'
+            };
+            return statusMap[status.toLowerCase()] || status;
+        }
+
+        // Render AI Tab
+        function renderAITab(app) {
+            // Check if we have AI data
+            const hasAIData = app.ai_score > 0 || app.ai_recommendation || app.risk_score;
+
+            if (!hasAIData) {
+                // Show empty state if no AI data
+                getElement('tab-ai').innerHTML = `
+                    <div class="card">
+                        <div class="card-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                                <path d="M12 2a10 10 0 0 1 10 10"></path>
+                                <circle cx="12" cy="12" r="6"></circle>
+                            </svg>
+                            <h3>Рекомендации ИИ</h3>
+                        </div>
+                        <div class="bki-empty" style="padding: 20px; text-align: center;">
+                            <p>Рекомендация ИИ будет сформирована после завершения анализа</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render risk assessment
+            const riskScore = app.risk_score || 0;
+            let riskClass = 'high';
+            let riskLabel = 'Высокий риск';
+            if (riskScore < 30) {
+                riskClass = 'low';
+                riskLabel = 'Низкий риск';
+            } else if (riskScore < 60) {
+                riskClass = 'medium';
+                riskLabel = 'Средний риск';
+            }
+
+            let riskFactorsHTML = '';
+            if (app.factors_analysis) {
+                try {
+                    const factors = JSON.parse(app.factors_analysis);
+                    if (factors && factors.length > 0) {
+                        riskFactorsHTML = factors.map(f => `
+                            <div class="factor-item ${f.type || 'neutral'}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                                <span>${f.text || ''}</span>
+                            </div>
+                        `).join('');
+                    }
+                } catch (e) {
+                    console.error('Error parsing factors:', e);
+                }
+            }
+            if (!riskFactorsHTML) {
+                riskFactorsHTML = '<div class="factor-item positive"><span>Кредитный рейтинг в норме</span></div>';
+            }
+
+            // Render recommendation
+            let recommendationClass = 'review';
+            let recommendationText = 'На рассмотрении';
+            if (app.ai_recommendation === 'approve') {
+                recommendationClass = 'approve';
+                recommendationText = 'Рекомендовано к одобрению';
+            } else if (app.ai_recommendation === 'reject') {
+                recommendationClass = 'reject';
+                recommendationText = 'Рекомендовано к отклонению';
+            }
+
+            // Render factors analysis
+            let factorsAnalysisHTML = '';
+            if (app.factors_analysis) {
+                try {
+                    const factors = JSON.parse(app.factors_analysis);
+                    if (factors && factors.length > 0) {
+                        factorsAnalysisHTML = factors.map(f => {
+                            const scoreClass = f.value >= 70 ? 'good' : (f.value >= 40 ? 'neutral' : 'bad');
+                            return `
+                                <div class="factor-card ${scoreClass}">
+                                    <div class="factor-score ${scoreClass}">${f.value || 0}</div>
+                                    <span class="factor-name">${f.text || ''}</span>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                } catch (e) {
+                    console.error('Error parsing factors:', e);
+                }
+            }
+
+            const container = getElement('tab-ai');
+            if (container) {
+                container.innerHTML = `
+                    <div class="card">
+                        <div class="card-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                                <path d="M12 2a10 10 0 0 1 10 10"></path>
+                                <circle cx="12" cy="12" r="6"></circle>
+                            </svg>
+                            <h3>Оценка рисков</h3>
+                        </div>
+                        <div class="risk-assessment">
+                            <div class="risk-chart">
+                                <div class="risk-percent ${riskClass}">${riskScore}%</div>
+                                <div class="risk-label">${riskLabel}</div>
+                            </div>
+                            <div class="risk-details">
+                                <div class="risk-factors">${riskFactorsHTML}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                <polyline points="2 17 12 22 22 17"></polyline>
+                                <polyline points="2 12 12 17 22 12"></polyline>
+                            </svg>
+                            <h3>Рекомендации ИИ</h3>
+                        </div>
+                        <div class="recommendation-box ${recommendationClass}">
+                            <div class="recommendation-text">${recommendationText}</div>
+                            <div class="recommendation-comment">${app.ai_comment || ''}</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <h3>Факторы анализа</h3>
+                        </div>
+                        ${factorsAnalysisHTML || '<div class="bki-empty" style="padding:20px"><p>Факторы анализа будут доступны после формирования рекомендаций ИИ</p></div>'}
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <h3>Комментарий ИИ</h3>
+                        </div>
+                        <div>${app.ai_comment ? `<div style="padding:15px;background:#f5f5f5;border-radius:8px;">${app.ai_comment}</div>` : '<div class="bki-empty" style="padding:20px"><p>Комментарий ИИ будет добавлен после завершения автоматического анализа</p></div>'}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Helper for risk level text
+        function getRiskLevelText(score) {
+            if (score >= 70) return 'Высокий риск';
+            if (score >= 40) return 'Средний риск';
+            return 'Низкий риск';
+        }
+
+        // Render History Tab
+        function renderHistoryTab(app) {
+            var history = [];
+            
+            try {
+                if (typeof app.action_history === 'string') {
+                    history = JSON.parse(app.action_history) || [];
+                } else if (Array.isArray(app.action_history)) {
+                    history = app.action_history;
+                }
+            } catch (e) {
+                console.error('Error parsing action_history:', e);
+                history = [];
+            }
+            
+            // Transform our Action objects to the expected format
+            var transformedHistory = history.map(function(action) {
+                var actionText = action.type;
+                // Map action types to Russian text
+                switch(action.type) {
+                    case 'created':
+                        actionText = 'Заявка создана';
+                        break;
+                    case 'started_review':
+                        actionText = 'Начало проверки';
+                        break;
+                    case 'status_changed':
+                        actionText = 'Изменение статуса';
+                        break;
+                    case 'decision_made':
+                        actionText = 'Принятие решения';
+                        break;
+                    case 'documents_requested':
+                        actionText = 'Запрос документов';
+                        break;
+                    default:
+                        actionText = action.type;
+                }
+                
+                // Map Go fields to JS fields: performer -> user, description -> details
+                var user = action.performer || action.user || 'Система';
+                var details = action.description || action.details || '';
+                var ts = action.timestamp || '';
+                
+                return {
+                    action: actionText,
+                    user: user,
+                    timestamp: ts,
+                    details: details,
+                    type: 'analyst'
+                };
+            });
+            
+            // Fallback if no history
+            if (transformedHistory.length === 0) {
+                transformedHistory = [
+                    { action: 'Заявка создана', user: 'Система', timestamp: app.created_at, details: 'Заявка подана через веб-форму', type: 'auto' },
+                ];
+            }
+            
+            // Sort history by timestamp (newest first)
+            transformedHistory.sort(function(a, b) {
+                return new Date(b.timestamp) - new Date(a.timestamp);
+            });
+             
+            getElement('timeline').innerHTML = transformedHistory.map(function(item) {
+                var itemClass = item.type === 'system' || item.type === 'auto' ? 'auto' : (item.user === 'Система' ? 'system' : 'analyst');
+                return '<div class="timeline-item ' + itemClass + '"><div class="timeline-dot"></div><div class="timeline-content"><div class="timeline-header"><span class="timeline-action">' + item.action + '</span><span class="timeline-author">' + item.user + '</span></div><div class="timeline-date">' + formatDateTime(item.timestamp) + '</div>' + (item.details ? '<div class="timeline-comment">' + item.details + '</div>' : '') + '</div></div>';
+            }).join('');
+        }
+
+        // Update Modal Summaries
+        function updateModalSummaries(app) {
+            var summaryHtml = '<div class="modal-summary-row"><span>Заявка</span><span>' + appId + '</span></div><div class="modal-summary-row"><span>Клиент</span><span>' + (app.full_name || '—') + '</span></div><div class="modal-summary-row"><span>Сумма</span><span>' + formatCurrency(app.requested_amount) + '</span></div><div class="modal-summary-row"><span>Срок</span><span>' + (app.credit_term || '—') + ' мес.</span></div>';
+
+            getElement('summary-approve').innerHTML = summaryHtml;
+            getElement('summary-reject').innerHTML = summaryHtml;
+            getElement('summary-documents').innerHTML = summaryHtml;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded fired');
+            console.log('Location:', window.location.href);
+            console.log('Pathname:', window.location.pathname);
+            
+            loadApplication();
+
+            // Close modals when clicking outside
+            window.onclick = function(event) {
+                if (event.target.classList.contains('modal-overlay')) {
+                    hideModals();
+                }
+            };
+
+            // Close modals with Escape key
+            document.onkeydown = function(event) {
+                if (event.key === 'Escape') {
+                    hideModals();
+                }
+            };
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Расписание - Представитель банка</title>
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=YOUR_API_KEY&lang=ru_RU"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .hidden { display: none !important; }
+        
+        .header { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 24px; }
+        .nav-menu { display: flex; gap: 20px; }
+        .nav-link { color: white; text-decoration: none; padding: 8px 16px; border-radius: 5px; transition: background 0.2s; }
+        .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.2); }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .logout-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
+        
+        .main-content { display: flex; flex-direction: column; gap: 20px; }
+        
+        .calendar { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .calendar-header h2 { color: #333; }
+        .nav-btns { display: flex; gap: 10px; }
+        .nav-btns button { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 5px; cursor: pointer; }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .calendar-day-header { text-align: center; padding: 10px; font-weight: 600; color: #666; background: #f8f9fa; border-radius: 5px; }
+        .calendar-day { min-height: 80px; padding: 8px; border: 1px solid #eee; border-radius: 5px; cursor: pointer; }
+        .calendar-day:hover { background: #f8f9fa; }
+        .calendar-day.today { background: rgba(40, 167, 69, 0.1); border-color: #28a745; }
+        .day-number { font-weight: 600; color: #333; margin-bottom: 5px; }
+        .day-meetings { font-size: 12px; }
+        .meeting-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 2px; }
+        .meeting-dot.scheduled { background: #ffc107; }
+        .meeting-dot.completed { background: #28a745; }
+        .meeting-dot.cancelled { background: #dc3545; }
+        
+        .schedule-list { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .schedule-list h3 { margin-bottom: 15px; color: #333; }
+        
+        .meeting-item { display: flex; gap: 15px; padding: 15px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; }
+        .meeting-time { min-width: 60px; font-weight: 600; color: #28a745; }
+        .meeting-info { flex: 1; }
+        .meeting-info .client-name { font-weight: 600; color: #333; }
+        .meeting-info .location { font-size: 14px; color: #666; }
+        .meeting-actions { display: flex; gap: 5px; }
+        .action-btn { padding: 6px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        .action-btn.call { background: #28a745; color: white; }
+        .action-btn.email { background: #6c757d; color: white; }
+        
+        .meeting-status { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .meeting-status.scheduled { background: #ffc107; color: #212529; }
+        .meeting-status.completed { background: #28a745; color: white; }
+        .meeting-status.cancelled { background: #dc3545; color: white; }
+        .meeting-status.no_show { background: #fd7e14; color: white; }
+        
+        .sidebar { display: flex; flex-direction: column; gap: 20px; }
+        
+        .sidebar-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .sidebar-card h3 { margin-bottom: 15px; color: #333; font-size: 16px; }
+        
+        .stat-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-label { color: #666; }
+        .stat-value { font-weight: 600; color: #333; }
+        
+        .upcoming-list { max-height: 200px; overflow-y: auto; }
+        .upcoming-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .upcoming-item:last-child { border-bottom: none; }
+        .upcoming-date { font-size: 12px; color: #666; }
+        .upcoming-client { font-weight: 600; color: #333; }
+        
+        .quick-actions { display: flex; flex-direction: column; gap: 10px; }
+        .quick-action-btn { padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; text-align: left; }
+        .quick-action-btn.primary { background: #28a745; color: white; }
+        .quick-action-btn.secondary { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
+        
+        .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { background: white; border-radius: 10px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 30px; color: #333; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #666; }
+        .form-group input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="login-section" class="login-container">
+        <div class="login-card">
+            <h1>Представитель банка</h1>
+            <div id="login-error" style="color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px;" class="hidden"></div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" id="login-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="login-password" placeholder="Введите пароль">
+            </div>
+            <button class="login-btn" onclick="login()">Войти</button>
+        </div>
+    </div>
+    
+    <div id="dashboard-section" class="hidden">
+        <div class="header">
+            <h1>Расписание</h1>
+            <nav class="nav-menu">
+                <a href="/representative/clients" class="nav-link" id="nav-clients">Клиенты</a>
+                <a href="/representative/schedule" class="nav-link active" id="nav-schedule">Расписание</a>
+                <a href="/representative/meeting-status" class="nav-link" id="nav-meetings">Статусы встреч</a>
+            </nav>
+            <div class="user-info">
+                <span id="user-greeting">Представитель</span>
+                <button class="logout-btn" onclick="logout()">Выйти</button>
+            </div>
+        </div>
+        
+        <div class="container">
+            <div class="main-content">
+                <div class="calendar">
+                    <div class="calendar-header">
+                        <h2 id="calendar-title">Апрель 2026</h2>
+                        <div class="nav-btns">
+                            <button onclick="prevMonth()">←</button>
+                            <button onclick="nextMonth()">→</button>
+                        </div>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+                </div>
+                
+                <div class="schedule-list">
+                    <h3>Встречи на сегодня</h3>
+                    <div id="today-meetings">
+                        <p style="color: #666; text-align: center; padding: 20px;">Нет встреч на сегодня</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <div class="sidebar-card">
+                    <h3>Статистика</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Сегодня</span>
+                        <span class="stat-value" id="stat-today">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">На неделе</span>
+                        <span class="stat-value" id="stat-week">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">В месяце</span>
+                        <span class="stat-value" id="stat-month">0</span>
+                    </div>
+                </div>
+                
+                <div class="sidebar-card">
+                    <h3>Ближайшие встречи</h3>
+                    <div class="upcoming-list" id="upcoming-meetings">
+                        <p style="color: #666; font-size: 14px;">Нет предстоящих встреч</p>
+                    </div>
+                </div>
+                
+                <div class="sidebar-card">
+                    <h3>Быстрые действия</h3>
+                    <div class="quick-actions">
+                        <button class="quick-action-btn primary" onclick="newMeeting()">+ Новая встреча</button>
+                        <button class="quick-action-btn secondary" onclick="viewWeek()">Просмотр недели</button>
+                        <button class="quick-action-btn secondary" onclick="viewHistory()">История встреч</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let token = null;
+        let currentDate = new Date();
+        let meetings = [];
+        let mapInstance = null;
+        let placemark = null;
+        
+        checkAuth();
+        
+        async function checkAuth() {
+            token = localStorage.getItem('adminToken');
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const selectedRole = localStorage.getItem('selectedRole');
+            
+            if (!token || (selectedRole !== 'representative' && selectedRole !== 'admin')) {
+                window.location.href = '/';
+                return;
+            }
+            
+            document.getElementById('user-greeting').textContent = userData.fullName || userData.username || 'Представитель';
+            showDashboard();
+            await loadMeetings();
+            setupMeetingModalEvents();
+            renderCalendar();
+        }
+        
+        function showDashboard() {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+        }
+        
+        async function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    token = data.token;
+                    localStorage.setItem('adminToken', token);
+                    localStorage.setItem('userData', JSON.stringify(data.user));
+                    localStorage.setItem('selectedRole', 'representative');
+                    showDashboard();
+                    checkAuth();
+                } else {
+                    document.getElementById('login-error').textContent = data.error || 'Ошибка входа';
+                    document.getElementById('login-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('login-error').textContent = 'Ошибка соединения';
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        }
+        
+        function logout() {
+            localStorage.removeItem('selectedRole');
+            window.location.href = '/role-select';
+        }
+        
+        async function loadMeetings() {
+            try {
+                const response = await fetch(`${API_URL}/api/representative/meetings`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    meetings = await response.json();
+                    renderTodayMeetings();
+                    updateStats();
+                    renderUpcoming();
+                }
+            } catch (error) {
+                console.error('Error loading meetings:', error);
+            }
+        }
+        
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            document.getElementById('calendar-title').textContent = 
+                new Date(year, month).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+            
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+            const daysInMonth = lastDay.getDate();
+            
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            let html = dayNames.map(d => `<div class="calendar-day-header">${d}</div>`).join('');
+            
+            for (let i = 0; i < startDay; i++) {
+                html += '<div class="calendar-day" style="background: #f8f9fa;"></div>';
+            }
+            
+            const today = new Date();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const isToday = date.toDateString() === today.toDateString();
+                const dayMeetings = meetings.filter(m => {
+                    const mDate = new Date(m.scheduledAt);
+                    return mDate.toDateString() === date.toDateString();
+                });
+                
+                let dots = '';
+                if (dayMeetings.length > 0) {
+                    dots = dayMeetings.map(m => 
+                        `<span class="meeting-dot ${m.status}"></span>`
+                    ).join('');
+                }
+                
+                html += `
+                    <div class="calendar-day ${isToday ? 'today' : ''}" onclick="selectDate('${date.toISOString()}')">
+                        <div class="day-number">${day}</div>
+                        <div class="day-meetings">${dots}</div>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('calendar-grid').innerHTML = html;
+        }
+        
+        function renderTodayMeetings() {
+            const today = new Date();
+            const todayMeetings = meetings.filter(m => {
+                const mDate = new Date(m.scheduledAt);
+                return mDate.toDateString() === today.toDateString();
+            });
+            
+            const container = document.getElementById('today-meetings');
+            
+            if (todayMeetings.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">Нет встреч на сегодня</p>';
+                return;
+            }
+            
+            container.innerHTML = todayMeetings.map(m => {
+                const time = new Date(m.scheduledAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                const statusLabels = { scheduled: 'Запланирована', completed: 'Завершена', cancelled: 'Отменена', no_show: 'Не пришел' };
+                
+                return `
+                    <div class="meeting-item">
+                        <div class="meeting-time">${time}</div>
+                        <div class="meeting-info">
+                            <div class="client-name">${m.clientName}</div>
+                            <div class="location">${m.location || 'Офис банка'}</div>
+                        </div>
+                        <span class="meeting-status ${m.status}">${statusLabels[m.status]}</span>
+                        <div class="meeting-actions">
+                            <button class="action-btn call" onclick="callClient('${m.clientPhone}')">📞</button>
+                            <button class="action-btn email" onclick="emailClient('${m.clientEmail}')">✉️</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateStats() {
+            const today = new Date();
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - today.getDay());
+            
+            const todayMeetings = meetings.filter(m => {
+                const mDate = new Date(m.scheduledAt);
+                return mDate.toDateString() === today.toDateString();
+            });
+            
+            const weekMeetings = meetings.filter(m => {
+                const mDate = new Date(m.scheduledAt);
+                return mDate >= weekStart && mDate <= today;
+            });
+            
+            const monthMeetings = meetings.filter(m => {
+                const mDate = new Date(m.scheduledAt);
+                return mDate.getMonth() === today.getMonth() && mDate.getFullYear() === today.getFullYear();
+            });
+            
+            document.getElementById('stat-today').textContent = todayMeetings.length;
+            document.getElementById('stat-week').textContent = weekMeetings.length;
+            document.getElementById('stat-month').textContent = monthMeetings.length;
+        }
+        
+        function renderUpcoming() {
+            const upcoming = meetings
+                .filter(m => new Date(m.scheduledAt) > new Date() && m.status === 'scheduled')
+                .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+                .slice(0, 5);
+            
+            const container = document.getElementById('upcoming-meetings');
+            
+            if (upcoming.length === 0) {
+                container.innerHTML = '<p style="color: #666; font-size: 14px;">Нет предстоящих встреч</p>';
+                return;
+            }
+            
+            container.innerHTML = upcoming.map(m => {
+                const date = new Date(m.scheduledAt);
+                return `
+                    <div class="upcoming-item">
+                        <div class="upcoming-date">${date.toLocaleDateString('ru-RU')} в ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div class="upcoming-client">${m.clientName}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function prevMonth() {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderCalendar();
+        }
+        
+        function nextMonth() {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderCalendar();
+        }
+        
+        function selectDate(dateStr) {
+            window.location.href = `/representative/meeting-status?date=${dateStr}`;
+        }
+        
+        function newMeeting() {
+            loadClientsForMeeting();
+            document.getElementById('new-meeting-modal').classList.remove('hidden');
+            // Set default date to today
+            document.getElementById('meeting-date').valueAsDate = new Date();
+            document.getElementById('meeting-time').value = '10:00';
+            // Initialize map after modal is shown
+            setTimeout(initMap, 300);
+        }
+        
+        function closeNewMeetingModal() {
+            document.getElementById('new-meeting-modal').classList.add('hidden');
+        }
+        
+        async function loadClientsForMeeting() {
+            try {
+                const response = await fetch(`${API_URL}/api/representative/clients`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const clients = await response.json();
+                    const select = document.getElementById('meeting-client-select');
+                    select.innerHTML = '<option value="">Выберите клиента</option>';
+                    clients.forEach(client => {
+                        const name = encodeURIComponent(client.fullName || '');
+                        const phone = encodeURIComponent(client.phone || '');
+                        const email = encodeURIComponent(client.email || '');
+                        select.innerHTML += `<option value="${client.id}" data-name="${name}" data-phone="${phone}" data-email="${email}">${client.fullName || 'Клиент'} - ${client.phone || ''}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading clients:', error);
+            }
+        }
+        
+        function setupMeetingModalEvents() {
+            const clientSelect = document.getElementById('meeting-client-select');
+            if (clientSelect) {
+                clientSelect.addEventListener('change', function() {
+                    const option = this.options[this.selectedIndex];
+                    if (option && option.value) {
+                        document.getElementById('meeting-client').value = decodeURIComponent(option.dataset.name || '');
+                        document.getElementById('meeting-phone').value = decodeURIComponent(option.dataset.phone || '');
+                        document.getElementById('meeting-email').value = decodeURIComponent(option.dataset.email || '');
+                    }
+                });
+            }
+        }
+        
+        function initMap() {
+            if (typeof ymaps === 'undefined') {
+                // Wait for ymaps to load
+                setTimeout(initMap, 500);
+                return;
+            }
+            
+            const mapContainer = document.getElementById('meeting-map');
+            if (!mapContainer || mapInstance) return;
+            
+            ymaps.ready(function() {
+                mapInstance = new ymaps.Map(mapContainer, {
+                    center: [55.7558, 37.6173], // Moscow
+                    zoom: 10
+                });
+                
+                mapInstance.events.add('click', function(e) {
+                    const coords = e.get('coords');
+                    
+                    if (placemark) {
+                        mapInstance.geoObjects.remove(placemark);
+                    }
+                    
+                    placemark = new ymaps.Placemark(coords, {}, {
+                        preset: 'islands#redDotIcon'
+                    });
+                    
+                    mapInstance.geoObjects.add(placemark);
+                    
+                    // Get address from coordinates and fill the field
+                    ymaps.geocode(coords).then(function(res) {
+                        const firstGeoObject = res.geoObjects.get(0);
+                        if (firstGeoObject) {
+                            const address = firstGeoObject.getAddressLine();
+                            document.getElementById('meeting-location').value = address;
+                        }
+                    });
+                });
+            });
+        }
+        
+        async function createMeeting() {
+            const clientId = document.getElementById('meeting-client-select').value;
+            const clientName = document.getElementById('meeting-client').value;
+            const clientPhone = document.getElementById('meeting-phone').value;
+            const clientEmail = document.getElementById('meeting-email').value;
+            const location = document.getElementById('meeting-location').value;
+            const date = document.getElementById('meeting-date').value;
+            const time = document.getElementById('meeting-time').value;
+            
+            if (!clientName || !date || !time) {
+                alert('Пожалуйста, заполните обязательные поля');
+                return;
+            }
+            
+            const scheduledAt = new Date(`${date}T${time}`);
+            
+            try {
+                const response = await fetch(`${API_URL}/api/representative/meetings`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        clientId: clientId,
+                        clientName: clientName,
+                        clientPhone: clientPhone,
+                        clientEmail: clientEmail,
+                        location: location,
+                        scheduledAt: scheduledAt.toISOString()
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Встреча успешно создана!');
+                    closeNewMeetingModal();
+                    loadMeetings();
+                } else {
+                    alert('Ошибка при создании встречи');
+                }
+            } catch (error) {
+                console.error('Error creating meeting:', error);
+                alert('Ошибка при создании встречи');
+            }
+        }
+        
+        function viewWeek() {
+            window.location.href = '/representative/schedule?view=week';
+        }
+        
+        function viewHistory() {
+            window.location.href = '/representative/meeting-status?filter=completed';
+        }
+        
+        function callClient(phone) { if(phone) window.open(`tel:${phone}`); }
+        function emailClient(email) { if(email) window.open(`mailto:${email}`); }
+    </script>
+    
+    <div id="new-meeting-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Новая встреча</h2>
+            <div class="form-group">
+                <label>Клиент *</label>
+                <select id="meeting-client-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+                    <option value="">Выберите клиента</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>ФИО</label>
+                <input type="text" id="meeting-client" placeholder="ФИО клиента">
+            </div>
+            <div class="form-group">
+                <label>Телефон</label>
+                <input type="tel" id="meeting-phone" placeholder="+7 (999) 123-45-67">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="meeting-email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label>Место встречи</label>
+                <input type="text" id="meeting-location" placeholder="Нажмите на карту или введите адрес">
+                <div id="meeting-map" style="width: 100%; height: 250px; margin-top: 10px; border-radius: 8px; border: 1px solid #ddd;"></div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">Нажмите на карту, чтобы указать место встречи</div>
+            </div>
+            <div class="form-group">
+                <label>Дата *</label>
+                <input type="date" id="meeting-date">
+            </div>
+            <div class="form-group">
+                <label>Время *</label>
+                <input type="time" id="meeting-time">
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn secondary" onclick="closeNewMeetingModal()">Отмена</button>
+                <button class="modal-btn primary" onclick="createMeeting()">Создать встречу</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: white; border-radius: 10px; padding: 25px; width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto; }
+        .modal h2 { margin-bottom: 20px; color: #333; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .modal-btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        .modal-btn.primary { background: #28a745; color: white; }
+        .modal-btn.secondary { background: #6c757d; color: white; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 6px; color: #666; font-size: 14px; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+    </style>
+</body>
+</html>

@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit App - Кредитные заявки</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .hidden { display: none !important; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 24px; }
+        .nav-menu { display: flex; gap: 20px; }
+        .nav-link { color: white; text-decoration: none; padding: 8px 16px; border-radius: 5px; transition: background 0.2s; }
+        .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.2); }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .logout-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
+        .logout-btn:hover { background: rgba(255,255,255,0.3); }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; cursor: pointer; transition: all 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .stat-card h3 { color: #666; font-size: 14px; margin-bottom: 10px; }
+        .stat-card .value { font-size: 32px; font-weight: bold; color: #333; }
+        .stat-card.new .value { color: #17a2b8; }
+        .stat-card.in_review .value { color: #ffc107; }
+        .stat-card.approved .value { color: #28a745; }
+        .stat-card.rejected .value { color: #dc3545; }
+        .section { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .section h2 { color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .applications-table { width: 100%; border-collapse: collapse; }
+        .applications-table th, .applications-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .applications-table th { background: #f8f9fa; font-weight: 600; color: #555; }
+        .applications-table tr:hover { background: #f8f9fa; }
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .status-badge.new { background: #17a2b8; color: white; }
+        .status-badge.in_review { background: #ffc107; color: #212529; }
+        .status-badge.approved { background: #28a745; color: white; }
+        .status-badge.rejected { background: #dc3545; color: white; }
+        .action-btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 5px; }
+        .action-btn.approve { background: #28a745; color: white; }
+        .action-btn.reject { background: #dc3545; color: white; }
+        .action-btn:hover { opacity: 0.9; }
+        .action-btn.view { background: #17a2b8; color: white; }
+        .action-btn.start { background: #6f42c1; color: white; }
+        .action-btn.continue { background: #fd7e14; color: white; }
+        .action-btn.create { background: #6f42c1; color: white; }
+        .error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; }
+        .success { color: #155724; padding: 10px; background: #d4edda; border-radius: 5px; margin-bottom: 15px; }
+        .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { background: white; border-radius: 10px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 30px; color: #333; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #666; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .login-btn:hover { opacity: 0.9; }
+        .no-data { text-align: center; padding: 40px; color: #666; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: white; border-radius: 10px; padding: 30px; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
+        .modal-close:hover { color: #333; }
+        .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .detail-item { padding: 10px; background: #f8f9fa; border-radius: 5px; }
+        .detail-item label { display: block; color: #666; font-size: 12px; margin-bottom: 5px; }
+        .detail-item span { font-weight: 500; font-size: 14px; }
+        .modal-actions { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .filter-bar { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label { color: #666; font-size: 14px; }
+        .filter-group select, .filter-group input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; flex-wrap: wrap; gap: 15px; }
+        .section-header h2 { margin: 0; padding: 0; border: none; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 10px 20px; background: #f8f9fa; border: none; border-radius: 5px; cursor: pointer; }
+        .tab-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .tab-btn:hover:not(.active) { background: #e9ecef; }
+        
+        /* Timeline styles for action history */
+        .timeline { position: relative; padding-left: 30px; margin-top: 15px; }
+        .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e0e0e0; }
+        .timeline-item { position: relative; padding-bottom: 25px; }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-dot { position: absolute; left: -25px; width: 16px; height: 16px; border-radius: 50%; background: #1976d2; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .timeline-item.system .timeline-dot { background: #9c27b0; }
+        .timeline-item.analyst .timeline-dot { background: #1976d2; }
+        .timeline-item.auto .timeline-dot { background: #4caf50; }
+        .timeline-content { background: #fafafa; padding: 15px; border-radius: 8px; }
+        .timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px; }
+        .timeline-action { font-weight: 600; color: #1a1a1a; }
+        .timeline-author { font-size: 12px; color: #666; padding: 3px 10px; background: #e8e8e8; border-radius: 10px; }
+        .timeline-date { font-size: 12px; color: #999; }
+        .timeline-comment { font-size: 13px; color: #555; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="login-section" class="login-container">
+        <div class="login-card">
+            <h1>Кредитные заявки</h1>
+            <div id="login-error" class="error hidden"></div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" id="login-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="login-password" placeholder="Введите пароль">
+            </div>
+            <button class="login-btn" onclick="login()">Войти</button>
+        </div>
+    </div>
+    
+    <!-- Admin Dashboard -->
+    <div id="dashboard-section" class="hidden">
+        <div class="header">
+            <h1>Кредитные заявки</h1>
+            <nav class="nav-menu">
+                <a href="/analyst" class="nav-link active" id="nav-applications">Заявки</a>
+                <a href="/reports" class="nav-link" id="nav-reports">Отчеты</a>
+            </nav>
+            <div class="user-info">
+                <span id="user-greeting">Администратор</span>
+                <button class="logout-btn" onclick="logout()">Выйти</button>
+            </div>
+        </div>
+        
+        <div class="container">
+            <div id="message" class="hidden"></div>
+            
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card" onclick="filterByStatus('all')">
+                    <h3>Всего заявок</h3>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card new" onclick="filterByStatus('new')">
+                    <h3>Новые</h3>
+                    <div class="value" id="stat-new">0</div>
+                </div>
+                <div class="stat-card in_review" onclick="filterByStatus('in_review')">
+                    <h3>В работе</h3>
+                    <div class="value" id="stat-in_review">0</div>
+                </div>
+                <div class="stat-card approved" onclick="filterByStatus('approved')">
+                    <h3>Одобрено</h3>
+                    <div class="value" id="stat-approved">0</div>
+                </div>
+                <div class="stat-card rejected" onclick="filterByStatus('rejected')">
+                    <h3>Отклонено</h3>
+                    <div class="value" id="stat-rejected">0</div>
+                </div>
+            </div>
+            
+            <!-- Applications Section -->
+            <div id="applications-section">
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Заявки</h2>
+                        <button class="action-btn create" onclick="showCreateForm()">+ Создать заявку</button>
+                    </div>
+                    
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="filter-group">
+                            <label>Статус:</label>
+                            <select id="filter-status" onchange="applyFilters()">
+                                <option value="">Все статусы</option>
+                                <option value="new">Новые</option>
+                                <option value="in_review">В работе</option>
+                                <option value="approved">Одобрено</option>
+                                <option value="rejected">Отклонено</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>ID заявки:</label>
+                            <input type="text" id="filter-app-id" placeholder="Поиск по ID" oninput="applyFilters()">
+                        </div>
+                        <div class="filter-group">
+                            <label>ФИО:</label>
+                            <input type="text" id="filter-client_name" placeholder="Поиск по ФИО" oninput="applyFilters()">
+                        </div>
+                        <button class="action-btn view" onclick="resetFilters()">Сбросить</button>
+                    </div>
+                    
+                    <table class="applications-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>ФИО клиента</th>
+                                <th>Дата и время подачи</th>
+                                <th>Сумма</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="applications-table">
+                        </tbody>
+                    </table>
+                    <div id="no-applications" class="no-data hidden">Нет заявок</div>
+                </div>
+            </div>
+            
+            <!-- Create Application -->
+            <div id="create-section" class="hidden">
+                <div class="section">
+                    <h2>Создать тестовую заявку</h2>
+                    <div id="create-error" class="error hidden"></div>
+                    <div class="form-group">
+                        <label>ФИО клиента</label>
+                        <input type="text" id="app-client_name" placeholder="Иванов Иван Иванович">
+                    </div>
+                    <div class="form-group">
+                        <label>Телефон</label>
+                        <input type="text" id="app-phone" placeholder="+7 (999) 123-45-67">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="app-email" placeholder="ivanov@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Серия паспорта</label>
+                        <input type="text" id="app-passport_series" placeholder="1234">
+                    </div>
+                    <div class="form-group">
+                        <label>Номер паспорта</label>
+                        <input type="text" id="app-passport_number" placeholder="567890">
+                    </div>
+                    <div class="form-group">
+                        <label>Ежемесячный доход (руб)</label>
+                        <input type="number" id="app-income" placeholder="50000">
+                    </div>
+                    <div class="form-group">
+                        <label>Дата рождения</label>
+                        <input type="date" id="app-birth_date">
+                    </div>
+                    <div class="form-group">
+                        <label>Пол</label>
+                        <select id="app-gender">
+                            <option value="Мужской">Мужской</option>
+                            <option value="Женский">Женский</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Адрес регистрации</label>
+                        <input type="text" id="app-registration_address" placeholder="г. Москва, ул. Ленина, д. 10">
+                    </div>
+                    <div class="form-group">
+                        <label>Адрес проживания</label>
+                        <input type="text" id="app-residence_address" placeholder="г. Москва, ул. Ленина, д. 10">
+                    </div>
+                    <div class="form-group">
+                        <label>Название компании</label>
+                        <input type="text" id="app-employment_place" placeholder="ООО Ромашка">
+                    </div>
+                    <div class="form-group">
+                        <label>Должность</label>
+                        <input type="text" id="app-position" placeholder="Менеджер">
+                    </div>
+                    <div class="form-group">
+                        <label>Цель кредита</label>
+                        <input type="text" id="app-credit_purpose" placeholder="Потребительские нужды">
+                    </div>
+                    <div class="form-group">
+                        <label>Сумма кредита (руб)</label>
+                        <input type="number" id="app-credit_amount" placeholder="100000">
+                    </div>
+                    <div class="form-group">
+                        <label>Срок кредита (месяцев)</label>
+                        <select id="app-credit_term">
+                            <option value="6">6 месяцев</option>
+                            <option value="12">12 месяцев</option>
+                            <option value="18">18 месяцев</option>
+                            <option value="24">24 месяца</option>
+                            <option value="36">36 месяцев</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Тип кредита</label>
+                        <select id="app-credit_type">
+                            <option value="AK">Автокредит (АК)</option>
+                            <option value="PK" selected>Потребительский кредит (ПК)</option>
+                            <option value="IP">Ипотека (ИП)</option>
+                            <option value="KK">Кредитная карта (КК)</option>
+                            <option value="BK">Бизнес-кредит (БК)</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="login-btn" onclick="createTestApplication()" style="max-width: 200px;">Создать заявку</button>
+                        <button class="action-btn view" onclick="showApplicationsList()" style="height: 44px;">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Application Details Modal -->
+    <div id="modal" class="hidden">
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2>Заявка #<span id="modal-id"></span></h2>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div class="detail-grid" id="modal-content">
+                </div>
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                    <label style="display: block; color: #666; font-size: 12px; margin-bottom: 5px;">История действий</label>
+                    <div id="modal-history" style="font-size: 14px;"></div>
+                </div>
+                <div class="modal-actions" id="modal-actions">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Use relative API URL (works regardless of port/domain)
+        const API_URL = '';
+        let token = null;
+        let allApplications = [];
+        let currentFilter = { status: '', client_name: '', app_id: '' };
+        
+        // Check token and load dashboard on page load
+        checkTokenAndLoadDashboard();
+        
+        async function checkTokenAndLoadDashboard() {
+            // Get fresh token from localStorage
+            token = localStorage.getItem('adminToken');
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const selectedRole = localStorage.getItem('selectedRole');
+            
+            // Allow analyst and admin roles to access this page
+            if (!token || (selectedRole !== 'analyst' && selectedRole !== 'admin')) {
+                window.location.href = '/';
+                return;
+            }
+            
+            // Проверяем имя пользователя из localStorage
+            const storedUsername = localStorage.getItem('username');
+            if (userData.username) {
+                document.getElementById('user-greeting').textContent = 'Добро пожаловать, ' + userData.username;
+            } else if (storedUsername) {
+                document.getElementById('user-greeting').textContent = 'Добро пожаловать, ' + storedUsername;
+            } else if (userData.fullName) {
+                document.getElementById('user-greeting').textContent = 'Добро пожаловать, ' + userData.fullName;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/admin/dashboard/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    showDashboard();
+                    loadDashboard();
+                } else if (response.status === 401) {
+                    // Token expired
+                    localStorage.removeItem('adminToken');
+                    showLogin();
+                } else {
+                    // Other errors - still show dashboard
+                    showDashboard();
+                    loadDashboard();
+                }
+            } catch (error) {
+                // Network error - show dashboard anyway
+                console.log('API not available, showing cached data');
+                showDashboard();
+                loadDashboard();
+            }
+        }
+        
+        function showLogin() {
+            document.getElementById('login-section').classList.remove('hidden');
+            document.getElementById('dashboard-section').classList.add('hidden');
+        }
+        
+        function showDashboard() {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+        }
+        
+        function showApplicationsList() {
+            document.getElementById('applications-section').classList.remove('hidden');
+            document.getElementById('create-section').classList.add('hidden');
+        }
+        
+        function showCreateForm() {
+            document.getElementById('applications-section').classList.add('hidden');
+            document.getElementById('create-section').classList.remove('hidden');
+        }
+        
+        async function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    token = data.token;
+                    localStorage.setItem('adminToken', token);
+                    // Сохраняем имя пользователя
+                    if (data.user && data.user.username) {
+                        localStorage.setItem('username', data.user.username);
+                    }
+                    showDashboard();
+                    loadDashboard();
+                } else {
+                    showLoginError(data.error || 'Ошибка входа');
+                }
+            } catch (err) {
+                showLoginError('Ошибка соединения');
+            }
+        }
+        
+        function logout() {
+            token = null;
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('username');
+            localStorage.removeItem('selectedRole');
+            localStorage.removeItem('userData');
+            window.location.href = '/';
+        }
+        
+        async function loadDashboard() {
+            await loadStats();
+            await loadApplications();
+        }
+        
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/dashboard/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const stats = await response.json();
+                    document.getElementById('stat-total').textContent = stats.total || 0;
+                    document.getElementById('stat-new').textContent = stats.new || 0;
+                    document.getElementById('stat-in_review').textContent = stats.in_review || 0;
+                    document.getElementById('stat-approved').textContent = stats.approved || 0;
+                    document.getElementById('stat-rejected').textContent = stats.rejected || 0;
+                    // Устанавливаем приветствие с именем пользователя
+                    if (stats.username) {
+                        document.getElementById('user-greeting').textContent = 'Добро пожаловать, ' + stats.username;
+                    } else {
+                        // Пробуем получить из localStorage
+                        const storedUsername = localStorage.getItem('username');
+                        if (storedUsername) {
+                            document.getElementById('user-greeting').textContent = 'Добро пожаловать, ' + storedUsername;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading stats:', err);
+            }
+        }
+        
+        async function loadApplications() {
+            try {
+                console.log('Loading applications with token:', token ? 'yes' : 'no');
+                const response = await fetch(`${API_URL}/api/admin/applications/review`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API error:', response.status, errorText);
+                    showMessage('Ошибка загрузки заявок: ' + response.status, 'error');
+                    return;
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Non-JSON response:', text);
+                    showMessage('Ошибка: неверный формат ответа', 'error');
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('DATA:', data);
+                allApplications = data;
+                console.log('ALL APPS:', allApplications.length);
+                applyFilters();
+            } catch (err) {
+                console.error('Load applications error:', err);
+                showMessage('Ошибка загрузки заявок', 'error');
+            }
+        }
+        
+        function filterByStatus(status) {
+            document.getElementById('filter-status').value = status;
+            applyFilters();
+        }
+        
+        function resetFilters() {
+            document.getElementById('filter-status').value = '';
+            document.getElementById('filter-client_name').value = '';
+            document.getElementById('filter-app-id').value = '';
+            applyFilters();
+        }
+        
+        function applyFilters() {
+            const statusInput = document.getElementById('filter-status');
+            const clientInput = document.getElementById('filter-client_name');
+            const appIdInput = document.getElementById('filter-app-id');
+            
+            currentFilter.status = statusInput ? statusInput.value : '';
+            currentFilter.client_name = clientInput ? clientInput.value.toLowerCase() : '';
+            currentFilter.app_id = appIdInput ? appIdInput.value.toLowerCase() : '';
+            
+            let filtered = allApplications;
+            
+            if (currentFilter.status) {
+                filtered = filtered.filter(app => app.status === currentFilter.status);
+            }
+            
+            if (currentFilter.client_name) {
+                filtered = filtered.filter(app => 
+                    (app.full_name || app.client_name || '').toLowerCase().includes(currentFilter.client_name)
+                );
+            }
+            
+            if (currentFilter.app_id) {
+                filtered = filtered.filter(app => 
+                    (app.id || '').toString().toLowerCase().includes(currentFilter.app_id)
+                );
+            }
+            
+            renderApplications(filtered);
+        }
+        
+        function renderApplications(applications) {
+            console.log('RENDER:', applications?.length);
+            
+            const tbody = document.getElementById('applications-table');
+            const noData = document.getElementById('no-applications');
+            
+            if (!tbody || !tbody) {
+                console.log('NO TBODY');
+                return;
+            }
+            
+            if (!applications || applications.length === 0) {
+                tbody.innerHTML = '';
+                if (noData) noData.classList.remove('hidden');
+                return;
+            }
+            
+            if (noData) noData.classList.add('hidden');
+            console.log('TBODY:', tbody);
+            console.log('APPS TO RENDER:', applications.length);
+            tbody.innerHTML = applications.map(app => {
+                const statusText = getStatusText(app.status);
+                const actions = getActions(app);
+                
+                return `
+                    <tr>
+                        <td>${app.id}</td>
+                        <td>${app.full_name || app.client_name || '—'}</td>
+                        <td>${formatDateTime(app.created_at)}</td>
+                        <td>${formatCurrency(app.requested_amount || app.credit_amount)}</td>
+                        <td><span class="status-badge ${app.status}">${statusText}</span></td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function getStatusText(status) {
+            const texts = {
+                'new': 'Новая',
+                'in_review': 'В работе',
+                'approved': 'Одобрена',
+                'rejected': 'Отклонена'
+            };
+            return texts[status] || status;
+        }
+        
+        function getActions(app) {
+            if (app.status === 'new') {
+                return `
+                    <button class="action-btn start" onclick="startReview('${app.id}')">Начать проверку</button>
+                    <a href="/application/${app.id}"><button class="action-btn view">Просмотр</button></a>
+                `;
+            } else if (app.status === 'in_review') {
+                return `
+                    <a href="/application/${app.id}"><button class="action-btn continue">Продолжить</button></a>
+                    <button class="action-btn approve" onclick="updateStatus('${app.id}', 'approved')">Одобрить</button>
+                    <button class="action-btn reject" onclick="updateStatus('${app.id}', 'rejected')">Отклонить</button>
+                `;
+            } else {
+                return `<a href="/application/${app.id}"><button class="action-btn view">Просмотр</button></a>`;
+            }
+        }
+        
+        async function startReview(id) {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/applications/${encodeURIComponent(id)}/start-review`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    showMessage('Проверка начата', 'success');
+                    loadDashboard();
+                } else {
+                    showMessage('Ошибка начала проверки', 'error');
+                }
+            } catch (err) {
+                showMessage('Ошибка соединения', 'error');
+            }
+        }
+        
+        async function updateStatus(id, status) {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/applications/${encodeURIComponent(id)}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ status: status })
+                });
+                
+                if (response.ok) {
+                    showMessage('Статус обновлен', 'success');
+                    loadDashboard();
+                } else {
+                    showMessage('Ошибка обновления статуса', 'error');
+                }
+            } catch (err) {
+                showMessage('Ошибка соединения', 'error');
+            }
+        }
+        
+        async function viewApplication(id) {
+            try {
+                const response = await fetch(`${API_URL}/api/applications/${encodeURIComponent(id)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const responseData = await response.json();
+                console.log('viewApplication API response:', responseData);
+                
+                // API returns { application: {...}, credit_type_text: "..." }
+                const app = responseData.application || responseData;
+                console.log('viewApplication app:', app);
+                
+                document.getElementById('modal-id').textContent = app.id;
+                document.getElementById('modal-content').innerHTML = `
+                    <div class="detail-item">
+                        <label>ФИО клиента</label>
+                        <span>${app.full_name || app.client_name || '—'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Телефон</label>
+                        <span>${app.phone || '—'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Email</label>
+                        <span>${app.email || '—'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Сумма кредита</label>
+                        <span>${formatCurrency(app.requested_amount || app.credit_amount)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Срок кредита</label>
+                        <span>${app.credit_term || '—'} мес.</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Тип кредита</label>
+                        <span>${app.credit_type || '—'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Ежемесячный доход</label>
+                        <span>${formatCurrency(app.monthly_income)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Место работы</label>
+                        <span>${app.employer_name || '—'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Должность</label>
+                        <span>${app.position || '—'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Дата подачи</label>
+                        <span>${formatDateTime(app.created_at)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Скоринговый балл</label>
+                        <span>${app.score || 'Не рассчитан'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>Статус</label>
+                        <span class="status-badge ${app.status}">${getStatusText(app.status)}</span>
+                    </div>
+                `;
+                
+                // Display action history
+                let historyHTML = '<div class="timeline">';
+                if (app.action_history) {
+                    let history = [];
+                    try {
+                        if (typeof app.action_history === 'string') {
+                            history = JSON.parse(app.action_history) || [];
+                        } else if (Array.isArray(app.action_history)) {
+                            history = app.action_history;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing action_history:', e);
+                        history = [];
+                    }
+                    
+                    // Transform our Action objects to the timeline format
+                    const transformedHistory = history.map(function(action) {
+                        var actionText = action.type;
+                        switch(action.type) {
+                            case 'created':
+                                actionText = 'Заявка создана';
+                                break;
+                            case 'started_review':
+                                actionText = 'Начало проверки';
+                                break;
+                            case 'status_changed':
+                                actionText = 'Изменение статуса';
+                                break;
+                            case 'decision_made':
+                                actionText = 'Принятие решения';
+                                break;
+                            case 'documents_requested':
+                                actionText = 'Запрос документов';
+                                break;
+                            default:
+                                actionText = action.type;
+                        }
+                        
+                        return {
+                            action: actionText,
+                            user: action.user,
+                            timestamp: action.timestamp,
+                            details: action.details,
+                            type: 'analyst'
+                        };
+                    });
+                    
+                    // Sort history by timestamp (newest first)
+                    transformedHistory.sort(function(a, b) {
+                        return new Date(b.timestamp) - new Date(a.timestamp);
+                    });
+                    
+                    if (transformedHistory.length > 0) {
+                        historyHTML += transformedHistory.map(function(item) {
+                            var itemClass = item.type === 'system' || item.type === 'auto' ? 'auto' : (item.user === 'Система' ? 'system' : 'analyst');
+                            return '<div class="timeline-item ' + itemClass + '"><div class="timeline-dot"></div><div class="timeline-content"><div class="timeline-header"><span class="timeline-action">' + item.action + '</span><span class="timeline-author">' + item.user + '</span></div><div class="timeline-date">' + formatDateTime(item.timestamp) + '</div>' + (item.details ? '<div class="timeline-comment">' + item.details + '</div>' : '') + '</div></div>';
+                        }).join('');
+                    } else {
+                        historyHTML += '<div class="bki-empty" style="padding: 20px; text-align: center;"><p>История действий отсутствует</p></div>';
+                    }
+                } else {
+                    historyHTML += '<div class="bki-empty" style="padding: 20px; text-align: center;"><p>История действий отсутствует</p></div>';
+                }
+                historyHTML += '</div>';
+                
+                document.getElementById('modal-history').innerHTML = historyHTML;
+                
+                const actions = document.getElementById('modal-actions');
+                if (app.status === 'new') {
+                    actions.innerHTML = `
+                        <button class="action-btn start" onclick="startReview('${app.id}'); closeModal();">Начать проверку</button>
+                    `;
+                } else if (app.status === 'in_review') {
+                    actions.innerHTML = `
+                        <button class="action-btn approve" onclick="updateStatus('${app.id}', 'approved'); closeModal();">Одобрить</button>
+                        <button class="action-btn reject" onclick="updateStatus('${app.id}', 'rejected'); closeModal();">Отклонить</button>
+                    `;
+                } else {
+                    actions.innerHTML = '';
+                }
+                
+                document.getElementById('modal').classList.remove('hidden');
+            } catch (err) {
+                showMessage('Ошибка загрузки данных заявки', 'error');
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+        
+        function showMessage(message, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = message;
+            messageEl.className = `message ${type} ${type === 'error' ? 'error' : 'success'}`;
+            messageEl.classList.remove('hidden');
+            
+            setTimeout(() => {
+                messageEl.classList.add('hidden');
+            }, 3000);
+        }
+        
+        function showLoginError(message) {
+            document.getElementById('login-error').textContent = message;
+            document.getElementById('login-error').classList.remove('hidden');
+        }
+        
+        function formatDateTime(dateString) {
+            if (!dateString) return '—';
+            const date = new Date(dateString);
+            return date.toLocaleString('ru-RU', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function formatCurrency(amount) {
+            if (!amount) return '—';
+            return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
+        }
+        
+        function createTestApplication() {
+            const birthDateInput = document.getElementById('app-birth_date').value;
+            const passportIssueDateInput = document.getElementById('app-passport_issue_date').value;
+            
+            const application = {
+                client_name: document.getElementById('app-client_name').value,
+                phone: document.getElementById('app-phone').value,
+                email: document.getElementById('app-email').value,
+                passport_series: document.getElementById('app-passport_series').value,
+                passport_number: document.getElementById('app-passport_number').value,
+                birth_date: birthDateInput ? birthDateInput + 'T00:00:00Z' : null,
+                gender: document.getElementById('app-gender').value,
+                registration_address: document.getElementById('app-registration_address').value,
+                residence_address: document.getElementById('app-residence_address').value,
+                monthly_income: parseFloat(document.getElementById('app-income').value) || 0,
+                employer_name: document.getElementById('app-employment_place').value,
+                position: document.getElementById('app-position').value,
+                credit_purpose: document.getElementById('app-credit_purpose').value,
+                requested_amount: parseFloat(document.getElementById('app-credit_amount').value) || 0,
+                credit_term: parseInt(document.getElementById('app-credit_term').value) || 12,
+                credit_type: document.getElementById('app-credit_type').value
+            };
+            
+            if (!application.client_name) {
+                document.getElementById('create-error').textContent = 'ФИО клиента обязательно';
+                document.getElementById('create-error').classList.remove('hidden');
+                return;
+            }
+            
+            fetch(`${API_URL}/api/applications`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(application)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.id) {
+                    showMessage('Тестовая заявка создана', 'success');
+                    showApplicationsList();
+                    loadApplications();
+                    
+                    // Clear form
+                    document.getElementById('app-client_name').value = '';
+                    document.getElementById('app-phone').value = '';
+                    document.getElementById('app-email').value = '';
+                    document.getElementById('app-passport_series').value = '';
+                    document.getElementById('app-passport_number').value = '';
+                    document.getElementById('app-birth_date').value = '';
+                    document.getElementById('app-gender').value = 'Мужской';
+                    document.getElementById('app-registration_address').value = '';
+                    document.getElementById('app-residence_address').value = '';
+                    document.getElementById('app-income').value = '';
+                    document.getElementById('app-employment_place').value = '';
+                    document.getElementById('app-position').value = '';
+                    document.getElementById('app-credit_purpose').value = '';
+                    document.getElementById('app-credit_amount').value = '';
+                } else {
+                    document.getElementById('create-error').textContent = data.error || 'Ошибка создания заявки';
+                    document.getElementById('create-error').classList.remove('hidden');
+                }
+            })
+            .catch(err => {
+                document.getElementById('create-error').textContent = 'Ошибка соединения';
+                document.getElementById('create-error').classList.remove('hidden');
+            });
+        }
+    </script>
+</body>
+</html>

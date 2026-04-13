@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Выбор роли - Credit App</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; }
+        
+        .container { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        
+        .login-card { background: white; border-radius: 15px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); width: 100%; max-width: 380px; }
+        .login-card h1 { text-align: center; margin-bottom: 8px; color: #333; font-size: 22px; }
+        .login-card .subtitle { text-align: center; color: #666; margin-bottom: 25px; font-size: 14px; }
+        
+        .login-error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; display: none; font-size: 14px; }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 6px; color: #666; font-size: 14px; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: 600; }
+        .login-btn:hover { opacity: 0.9; }
+        
+        .role-selection { display: none; }
+        .role-selection.show { display: block; }
+        .role-cards { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
+        
+        .role-card { border: 2px solid #eee; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s; }
+        .role-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        .role-card.analyst { border-color: #667eea; }
+        .role-card.analyst:hover { background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); }
+        .role-card.representative { border-color: #28a745; }
+        .role-card.representative:hover { background: rgba(40, 167, 69, 0.1); }
+        
+        .role-card .icon { font-size: 36px; margin-bottom: 10px; }
+        .role-card h3 { margin-bottom: 8px; color: #333; font-size: 16px; }
+        .role-card p { color: #666; font-size: 13px; line-height: 1.4; }
+        
+        .role-card.analyst .icon { color: #667eea; }
+        .role-card.representative .icon { color: #28a745; }
+        
+        .role-label { font-size: 12px; color: #999; text-align: center; margin-top: 15px; }
+        
+        .back-link { display: block; text-align: center; margin-top: 15px; color: #667eea; font-size: 14px; cursor: pointer; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="login-card">
+            <h1 id="card-title">Выберите роль</h1>
+            <p class="subtitle" id="card-subtitle">Для входа в систему выберите роль и войдите</p>
+            
+            <div id="login-error" class="login-error"></div>
+            
+            <div id="role-selection" class="role-selection show">
+                <div class="role-cards">
+                    <div class="role-card analyst" onclick="showLoginForRole('analyst')">
+                        <div class="icon">📊</div>
+                        <h3>Кредитный аналитик</h3>
+                        <p>Анализ заявок, проверка данных БКИ, принятие решений по кредитам</p>
+                    </div>
+                    <div class="role-card representative" onclick="showLoginForRole('representative')">
+                        <div class="icon">🏦</div>
+                        <h3>Представитель банка</h3>
+                        <p>Работа с одобренными клиентами, оформление кредитных карт, встречи</p>
+                    </div>
+                </div>
+                <p class="role-label">Выберите роль, затем выполните вход</p>
+            </div>
+            
+            <div id="login-form" style="display: none;">
+                <div class="form-group">
+                    <label>Логин</label>
+                    <input type="text" id="login-username" placeholder="Введите логин">
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" id="login-password" placeholder="Введите пароль">
+                </div>
+                <button class="login-btn" onclick="login()">Войти</button>
+                <a class="back-link" onclick="showRoleSelection()">← Назад к выбору роли</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = null;
+        let userData = null;
+        let selectedRole = null;
+        
+        function showRoleSelection() {
+            selectedRole = null;
+            document.getElementById('role-selection').classList.add('show');
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('card-title').textContent = 'Выберите роль';
+            document.getElementById('card-subtitle').textContent = 'Для входа в систему выберите роль и войдите';
+            document.getElementById('login-error').style.display = 'none';
+        }
+        
+        function showLoginForRole(role) {
+            selectedRole = role;
+            document.getElementById('role-selection').classList.remove('show');
+            document.getElementById('login-form').style.display = 'block';
+            
+            if (role === 'analyst') {
+                document.getElementById('card-title').textContent = 'Вход для аналитика';
+                document.getElementById('card-subtitle').textContent = 'Введите учетные данные кредитного аналитика';
+            } else {
+                document.getElementById('card-title').textContent = 'Вход для представителя';
+                document.getElementById('card-subtitle').textContent = 'Введите учетные данные представителя банка';
+            }
+            document.getElementById('login-error').style.display = 'none';
+            
+            document.getElementById('login-username').focus();
+        }
+        
+        async function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            if (!username || !password) {
+                showError('Введите логин и пароль');
+                return;
+            }
+            
+            if (!selectedRole) {
+                showError('Выберите роль');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Check if user role matches selected role (admin can access both)
+                    const userRole = data.user.role;
+                    
+                    if (selectedRole === 'analyst' && userRole !== 'analyst' && userRole !== 'admin') {
+                        showError('У вас нет доступа к роли Кредитный аналитик. Выберите роль Представитель банка.');
+                        return;
+                    }
+                    
+                    if (selectedRole === 'representative' && userRole !== 'representative' && userRole !== 'admin') {
+                        showError('У вас нет доступа к роли Представитель банка. Выберите роль Кредитный аналитик.');
+                        return;
+                    }
+                    
+                    token = data.token;
+                    userData = data.user;
+                    localStorage.setItem('adminToken', token);
+                    localStorage.setItem('userData', JSON.stringify(userData));
+                    localStorage.setItem('selectedRole', selectedRole);
+                    
+                    // Check for redirect param
+                    var redirectTo = new URLSearchParams(window.location.search).get('redirect');
+                    if (redirectTo) {
+                        window.location.href = decodeURIComponent(redirectTo);
+                    } else if (selectedRole === 'analyst') {
+                        window.location.href = '/analyst';
+                    } else {
+                        window.location.href = '/representative/clients';
+                    }
+                } else {
+                    showError(data.error || 'Ошибка входа');
+                }
+            } catch (err) {
+                showError('Ошибка соединения');
+            }
+        }
+        
+        function showError(message) {
+            const el = document.getElementById('login-error');
+            el.textContent = message;
+            el.style.display = 'block';
+        }
+        
+        // Clear any old session data on load
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('expired') === 'true') {
+            showError('Сессия истекла. Войдите снова.');
+        }
+        
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('userData');
+        localStorage.removeItem('selectedRole');
+        
+        // Show role selection by default
+        showRoleSelection();
+    </script>
+</body>
+</html>

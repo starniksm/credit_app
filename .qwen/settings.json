@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go *)",
+      "Bash(pkill *)",
+      "Bash(true)",
+      "Bash(lsof *)",
+      "Bash(xargs *)",
+      "Bash(sleep *)",
+      "Bash(curl *)",
+      "Bash(cat *)",
+      "Bash(docker-compose *)",
+      "Bash(psql *)",
+      "Bash(brew *)",
+      "Bash(python3 *)"
+    ]
+  },
+  "$version": 3
+}
