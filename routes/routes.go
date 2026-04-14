@@ -59,6 +59,8 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 				// Decision endpoints
 				admin.POST("/applications/:id/decision", adminHandler.MakeDecision)
 				admin.POST("/applications/:id/documents-request", adminHandler.RequestDocuments)
+				// AI recommendation endpoint
+				admin.POST("/applications/:id/ai-recommendation", adminHandler.GenerateAIRecommendation)
 			}
 
 			// Representative-specific endpoints

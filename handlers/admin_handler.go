@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"credit_app/models"
@@ -863,5 +866,111 @@ func (h *AdminHandler) RequestDocuments(c *gin.Context) {
 		"message":     "Documents requested successfully",
 		"application": result,
 		"documents":   req.Documents,
+	})
+}
+
+// AIRecommendationRequest represents a request for AI recommendation
+type AIRecommendationRequest struct {
+	// No body needed, all info comes from the application
+}
+
+// GenerateAIRecommendation performs AI analysis on an application
+func (h *AdminHandler) GenerateAIRecommendation(c *gin.Context) {
+	appID := c.Param("id")
+	db := h.service.GetDB()
+
+	var app models.CreditApplication
+	if err := db.First(&app, "id = ?", appID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Заявка не найдена"})
+		return
+	}
+
+	// Perform scoring analysis
+	totalScore, err := utils.CalculateScoring(&app)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при расчёте скоринга"})
+		return
+	}
+
+	score := int(totalScore)
+
+	// Determine recommendation based on score
+	var recommendation string
+	var comment string
+
+	if score >= 70 {
+		recommendation = "approve"
+		comment = fmt.Sprintf("На основе комплексного анализа кредитной истории и финансовых данных клиента рекомендуется одобрение заявки. Общий скоринговый балл: %d. Кредитный рейтинг клиента позволяет предложить конкурентные условия кредитования. Долговая нагрузка находится в допустимых пределах.", score)
+	} else if score >= 40 {
+		recommendation = "review"
+		comment = fmt.Sprintf("Требуется дополнительное рассмотрение. Общий скоринговый балл: %d. Некоторые факторы вызывают сомнения. Рекомендуется запросить дополнительные документы или провести личное собеседование с клиентом.", score)
+	} else {
+		recommendation = "reject"
+		comment = fmt.Sprintf("На основе анализа данных клиента рекомендуется отклонение заявки. Общий скоринговый балл: %d. Выявлены существенные факторы риска, не позволяющие одобрить кредит на запрашиваемых условиях.", score)
+	}
+
+	// Generate factors analysis based on application data
+	factors := []map[string]interface{}{
+		{"text": "Кредитный рейтинг", "value": app.CreditScore, "type": "credit"},
+		{"text": "Стабильность дохода", "value": app.IncomeStabilityScore, "type": "income"},
+		{"text": "Кредитная нагрузка", "value": app.DebtBurdenScore, "type": "debt"},
+		{"text": "Возрастной фактор", "value": app.AgeFactorScore, "type": "age"},
+		{"text": "Занятость", "value": app.EmploymentScore, "type": "employment"},
+	}
+
+	factorsJSON, _ := json.Marshal(factors)
+
+	// Update application with AI data
+	app.AIScore = score
+	app.AIRecommendation = recommendation
+	app.AIComment = comment
+	app.RiskScore = score
+
+	// Save positive and risk factors
+	var positiveFactors []string
+	var riskFactors []string
+
+	if app.CreditScore >= 700 {
+		positiveFactors = append(positiveFactors, "Высокий кредитный рейтинг")
+	} else if app.CreditScore >= 600 {
+		positiveFactors = append(positiveFactors, "Удовлетворительный кредитный рейтинг")
+	} else {
+		riskFactors = append(riskFactors, "Низкий кредитный рейтинг")
+	}
+
+	if app.MonthlyIncome > 0 && app.RequestedAmount/app.MonthlyIncome < 3 {
+		positiveFactors = append(positiveFactors, "Достаточный уровень дохода")
+	} else {
+		riskFactors = append(riskFactors, "Высокая кредитная нагрузка относительно дохода")
+	}
+
+	if len(positiveFactors) == 0 {
+		positiveFactors = []string{"Достаточные данные для анализа"}
+	}
+	if len(riskFactors) == 0 {
+		riskFactors = []string{"Требуется дополнительная проверка"}
+	}
+
+	app.PositiveFactors = strings.Join(positiveFactors, "; ")
+	app.RiskFactors = strings.Join(riskFactors, "; ")
+
+	// Save updated application
+	if err := db.Save(&app).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Add action to history
+	app.AddActionToHistory("ai_analysis", "ИИ-система", fmt.Sprintf("Проведён скоринговый анализ. Рекомендация: %s. Балл: %d", recommendation, score))
+	db.Save(&app)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "AI анализ завершён успешно",
+		"recommendation": recommendation,
+		"comment":        comment,
+		"score":          score,
+		"risk_score":     score,
+		"credit_score":   app.CreditScore,
+		"factors":        string(factorsJSON),
 	})
 }

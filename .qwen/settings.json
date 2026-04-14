@@ -20,7 +20,8 @@
       "Bash(rm *)",
       "Bash(find *)",
       "Bash(ls *)",
-      "Bash(chmod *)"
+      "Bash(chmod *)",
+      "Bash(file *)"
     ]
   },
   "$version": 3

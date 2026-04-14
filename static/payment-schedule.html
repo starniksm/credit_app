@@ -57,16 +57,16 @@
 
         /* Chart */
         .chart-wrapper { display: flex; gap: 10px; align-items: stretch; }
-        .chart-y-axis { width: 70px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding-right: 8px; }
-        .chart-y-label { font-size: 11px; color: #666; text-align: right; white-space: nowrap; }
+        .chart-y-axis { width: 80px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 0 8px 0 0; }
+        .chart-y-label { font-size: 12px; color: #666; text-align: right; white-space: nowrap; }
         .chart-y-title { font-size: 11px; color: #999; text-align: center; transform: rotate(-90deg); white-space: nowrap; }
-        .chart-area { flex: 1; display: flex; flex-direction: column; }
-        .chart-container { height: 350px; display: flex; align-items: flex-end; gap: 3px; padding: 0; flex: 1; border-left: 2px solid #ddd; border-bottom: 2px solid #ddd; }
-        .chart-bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; }
-        .chart-bar-principal { background: #007bff; border-radius: 2px 2px 0 0; min-height: 2px; }
-        .chart-bar-interest { background: #fd7e14; border-radius: 0; min-height: 2px; }
-        .chart-x-axis { display: flex; gap: 3px; padding-left: 2px; }
-        .chart-x-label { flex: 1; text-align: center; font-size: 10px; color: #999; white-space: nowrap; overflow: hidden; }
+        .chart-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .chart-container { min-height: 350px; height: 350px; display: flex; align-items: flex-end; gap: 2px; padding: 0; border-left: 2px solid #ddd; border-bottom: 2px solid #ddd; position: relative; flex-shrink: 0; overflow-x: auto; }
+        .chart-bar { flex: none; width: 16px; display: flex; flex-direction: column-reverse; justify-content: flex-start; height: 350px; position: relative; }
+        .chart-bar-principal { background: #007bff; border-radius: 2px 2px 0 0; min-height: 0; width: 100%; }
+        .chart-bar-interest { background: #fd7e14; border-radius: 0 0 0 0; min-height: 0; width: 100%; }
+        .chart-x-axis { display: flex; gap: 2px; padding-left: 0; }
+        .chart-x-label { flex: none; width: 16px; text-align: center; font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; }
         .chart-legend { display: flex; gap: 20px; justify-content: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
         .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #666; }
         .legend-color { width: 16px; height: 16px; border-radius: 3px; }
@@ -630,6 +630,7 @@
             xAxis.innerHTML = '';
 
             const maxPayment = Math.max(...schedule.map(s => s.payment));
+            const chartHeight = 1200; // px
 
             // Y-axis labels
             const yMax = Math.ceil(maxPayment / 5000) * 5000;
@@ -643,12 +644,13 @@
                 bar.className = 'chart-bar';
                 bar.title = `Месяц ${row.num}: ${formatMoney(Math.round(row.payment))}`;
 
-                const principalHeight = (row.principal / maxPayment) * 100;
-                const interestHeight = (row.interest / maxPayment) * 100;
+                // Heights in pixels based on 600px container
+                const principalPx = (row.principal / maxPayment) * chartHeight;
+                const interestPx = (row.interest / maxPayment) * chartHeight;
 
                 bar.innerHTML = `
-                    <div class="chart-bar-interest" style="height: ${interestHeight}%"></div>
-                    <div class="chart-bar-principal" style="height: ${principalHeight}%"></div>
+                    <div class="chart-bar-principal" style="height: ${principalPx}px"></div>
+                    <div class="chart-bar-interest" style="height: ${interestPx}px"></div>
                 `;
                 container.appendChild(bar);
 

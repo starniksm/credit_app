@@ -487,7 +487,7 @@
                 <!-- Right Column -->
                 <div class="right-column">
                     <!-- Document Status -->
-                    <div class="card sidebar-card">
+                    <div class="card sidebar-card" id="status-card">
                         <div class="card-header">
                             <div class="card-title">Статус документа</div>
                         </div>
@@ -496,48 +496,48 @@
                         <div class="status-details">
                             <div class="status-detail">
                                 <span class="status-detail-label">Номер договора</span>
-                                <span class="status-detail-value">placeholder</span>
+                                <span class="status-detail-value" id="status-contract-num">—</span>
                             </div>
                             <div class="status-detail">
                                 <span class="status-detail-label">Дата создания</span>
-                                <span class="status-detail-value">placeholder</span>
+                                <span class="status-detail-value" id="status-date">—</span>
                             </div>
                             <div class="status-detail">
                                 <span class="status-detail-label">Создал</span>
-                                <span class="status-detail-value">placeholder</span>
+                                <span class="status-detail-value" id="status-creator">—</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Credit Summary -->
-                    <div class="card">
+                    <div class="card" id="summary-card">
                         <div class="card-header">
                             <div class="card-title">Сводка по кредиту</div>
                         </div>
-                        <div class="summary-grid">
+                        <div class="summary-grid" id="summary-grid">
                             <div class="summary-item">
                                 <span class="summary-label">Продукт</span>
-                                <span class="summary-value">placeholder</span>
+                                <span class="summary-value" id="summary-product">—</span>
                             </div>
                             <div class="summary-item">
                                 <span class="summary-label">Сумма</span>
-                                <span class="summary-value">placeholder</span>
+                                <span class="summary-value" id="summary-amount">—</span>
                             </div>
                             <div class="summary-item">
                                 <span class="summary-label">Срок</span>
-                                <span class="summary-value">placeholder</span>
+                                <span class="summary-value" id="summary-term">—</span>
                             </div>
                             <div class="summary-item">
                                 <span class="summary-label">Ставка</span>
-                                <span class="summary-value">placeholder</span>
+                                <span class="summary-value" id="summary-rate">—</span>
                             </div>
                             <div class="summary-item">
                                 <span class="summary-label">Тип платежа</span>
-                                <span class="summary-value">placeholder</span>
+                                <span class="summary-value" id="summary-type">—</span>
                             </div>
                             <div class="summary-item">
-                                <span class="summary-label">Обеспечение</span>
-                                <span class="summary-value">placeholder</span>
+                                <span class="summary-label">Клиент</span>
+                                <span class="summary-value" id="summary-client">—</span>
                             </div>
                         </div>
                     </div>
@@ -810,15 +810,10 @@
             document.getElementById('preview-borrower-signature').textContent = fullName;
 
             // Update status card (Статус документа)
-            const statusDetails = document.querySelectorAll('.status-detail-value');
-            if (statusDetails.length >= 3) {
-                statusDetails[0].textContent = contractNum;
-                statusDetails[1].textContent = new Date().toLocaleDateString('ru-RU');
-                statusDetails[2].textContent = 'Кредитный аналитик';
-            }
+            updateStatusCard(contractNum);
 
             // Update credit summary (Сводка по кредиту)
-            updateCreditSummary(app);
+            updateSummaryCard(app);
         }
 
         function populatePreviewFromParams(params) {
@@ -843,18 +838,19 @@
             document.getElementById('preview-borrower-signature').textContent = '—';
 
             // Update status card
-            const statusDetails = document.querySelectorAll('.status-detail-value');
-            if (statusDetails.length >= 3) {
-                statusDetails[0].textContent = contractNum;
-                statusDetails[1].textContent = new Date().toLocaleDateString('ru-RU');
-                statusDetails[2].textContent = 'Кредитный аналитик';
-            }
+            updateStatusCard(contractNum);
         }
 
-        function updateCreditSummary(app) {
-            const summaryGrid = document.querySelector('.card:nth-child(2) .summary-grid');
-            if (!summaryGrid) return;
+        function updateStatusCard(contractNum) {
+            const numEl = document.getElementById('status-contract-num');
+            const dateEl = document.getElementById('status-date');
+            const creatorEl = document.getElementById('status-creator');
+            if (numEl) numEl.textContent = contractNum || '—';
+            if (dateEl) dateEl.textContent = new Date().toLocaleDateString('ru-RU');
+            if (creatorEl) creatorEl.textContent = 'Кредитный аналитик';
+        }
 
+        function updateSummaryCard(app) {
             const type = loanParams ? (loanParams.type || 'annuity') : 'annuity';
             const typeText = type === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
             const amount = loanParams ? (loanParams.amount || 0) : (app.requested_amount || 0);
@@ -862,14 +858,19 @@
             const rate = loanParams ? (loanParams.rate || 0) : 14;
             const productName = loanParams ? (loanParams.productName || '—') : getProductTypeName(app.credit_type);
 
-            summaryGrid.innerHTML = `
-                <div class="summary-item"><span class="summary-label">Продукт</span><span class="summary-value">${productName}</span></div>
-                <div class="summary-item"><span class="summary-label">Сумма</span><span class="summary-value">${formatMoney(Math.round(amount))}</span></div>
-                <div class="summary-item"><span class="summary-label">Срок</span><span class="summary-value">${term} мес</span></div>
-                <div class="summary-item"><span class="summary-label">Ставка</span><span class="summary-value">${rate}%</span></div>
-                <div class="summary-item"><span class="summary-label">Тип платежа</span><span class="summary-value">${typeText}</span></div>
-                <div class="summary-item"><span class="summary-label">Клиент</span><span class="summary-value">${app.client_name || app.full_name || '—'}</span></div>
-            `;
+            const productEl = document.getElementById('summary-product');
+            const amountEl = document.getElementById('summary-amount');
+            const termEl = document.getElementById('summary-term');
+            const rateEl = document.getElementById('summary-rate');
+            const typeEl = document.getElementById('summary-type');
+            const clientEl = document.getElementById('summary-client');
+
+            if (productEl) productEl.textContent = productName;
+            if (amountEl) amountEl.textContent = formatMoney(Math.round(amount));
+            if (termEl) termEl.textContent = `${term} мес`;
+            if (rateEl) rateEl.textContent = `${rate}%`;
+            if (typeEl) typeEl.textContent = typeText;
+            if (clientEl) clientEl.textContent = app.client_name || app.full_name || '—';
         }
 
         function calculateAndSetResults(amount, term, rate, type) {

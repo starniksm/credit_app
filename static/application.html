@@ -203,6 +203,9 @@
         .decision-btn.reject { background: linear-gradient(135deg, #f44336, #c62828); color: white; }
         .decision-btn.documents { background: linear-gradient(135deg, #ff9800, #f57c00); color: white; }
         .decision-btn svg { width: 20px; height: 20px; }
+
+        /* Loading animation */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         
         /* Modal */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; animation: fadeIn 0.2s ease; }
@@ -1284,7 +1287,7 @@
 
                 // Update UI
                 if (titleEl) {
-                    titleEl.textContent = 'Заявка #' + currentApp.id;
+                    titleEl.textContent = 'Заявка №' + currentApp.id;
                     console.log('Updated title to:', titleEl.textContent);
                 }
 
@@ -1352,7 +1355,7 @@
             if (!currentApp) return;
 
             // Update header
-            getElement('app-id-title').textContent = `Заявка #${currentApp.id}`;
+            getElement('app-id-title').textContent = `Заявка №${currentApp.id}`;
             getElement('status-badge').textContent = getStatusText(currentApp.status);
             getElement('status-badge').className = `status-badge ${getStatusClass(currentApp.status)}`;
             
@@ -1557,7 +1560,7 @@
             const hasAIData = app.ai_score > 0 || app.ai_recommendation || app.risk_score;
 
             if (!hasAIData) {
-                // Show empty state if no AI data
+                // Show empty state with button to request AI analysis
                 getElement('tab-ai').innerHTML = `
                     <div class="card">
                         <div class="card-header">
@@ -1568,8 +1571,20 @@
                             </svg>
                             <h3>Рекомендации ИИ</h3>
                         </div>
-                        <div class="bki-empty" style="padding: 20px; text-align: center;">
-                            <p>Рекомендация ИИ будет сформирована после завершения анализа</p>
+                        <div class="bki-empty" style="padding: 40px 20px; text-align: center;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5" style="width: 64px; height: 64px; margin: 0 auto 16px;">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 16v-4"></path>
+                                <path d="M12 8h.01"></path>
+                            </svg>
+                            <p style="color: #666; margin-bottom: 20px; font-size: 15px;">Рекомендация ИИ ещё не запрошена</p>
+                            <p style="color: #999; margin-bottom: 24px; font-size: 13px;">Для получения рекомендации необходимо проанализировать кредитную историю клиента и провести скоринговый анализ</p>
+                            <button class="action-btn start" onclick="requestAIRecommendation('${app.id}')" style="padding: 12px 24px; font-size: 15px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                </svg>
+                                Запросить рекомендацию ИИ
+                            </button>
                         </div>
                     </div>
                 `;
@@ -1790,6 +1805,62 @@
             getElement('summary-approve').innerHTML = summaryHtml;
             getElement('summary-reject').innerHTML = summaryHtml;
             getElement('summary-documents').innerHTML = summaryHtml;
+        }
+
+        // Request AI Recommendation
+        async function requestAIRecommendation(appId) {
+            if (!token) {
+                alert('Необходима авторизация');
+                return;
+            }
+
+            // Show loading state
+            getElement('tab-ai').innerHTML = `
+                <div class="card">
+                    <div class="card-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                            <path d="M12 2a10 10 0 0 1 10 10"></path>
+                            <circle cx="12" cy="12" r="6"></circle>
+                        </svg>
+                        <h3>Рекомендации ИИ</h3>
+                    </div>
+                    <div style="padding: 40px 20px; text-align: center;">
+                        <div style="display: inline-block; width: 48px; height: 48px; border: 4px solid #e0e0e0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
+                        <p style="color: #666; font-size: 15px;">ИИ анализирует кредитную историю клиента...</p>
+                        <p style="color: #999; font-size: 13px; margin-top: 8px;">Проводится скоринговый анализ</p>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/applications/${appId}/ai-recommendation`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const data = await response.json();
+
+                if (data && data.recommendation) {
+                    // Update currentApp with new AI data
+                    currentApp.ai_recommendation = data.recommendation;
+                    currentApp.ai_comment = data.comment || '';
+                    currentApp.ai_score = data.score || 0;
+                    currentApp.risk_score = data.risk_score || 0;
+                    currentApp.credit_score = data.credit_score || 0;
+                    currentApp.factors_analysis = data.factors || '[]';
+
+                    // Re-render AI tab
+                    renderAITab(currentApp);
+                } else {
+                    alert('Ошибка при получении рекомендации ИИ');
+                    renderAITab(currentApp);
+                }
+            } catch (err) {
+                console.error('AI recommendation error:', err);
+                alert('Ошибка при запросе рекомендации ИИ');
+                renderAITab(currentApp);
+            }
         }
 
         // Initialize

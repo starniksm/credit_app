@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -23,34 +25,7 @@ func NewDocumentHandler(db *gorm.DB) *DocumentHandler {
 	return &DocumentHandler{db: db}
 }
 
-// addCyrillicFont attempts to add a Cyrillic-compatible UTF-8 font
-// Returns true if the font was successfully loaded
-func addCyrillicFont(pdf *gofpdf.Fpdf) (success bool) {
-	success = false
-
-	defer func() {
-		if r := recover(); r != nil {
-			// Font loading failed silently
-			success = false
-		}
-	}()
-
-	// gofpdf v1.16.2+ AddUTF8Font can auto-generate the font definition from .ttf
-	// The font file must be in the font directory specified in gofpdf.New()
-	pdf.AddUTF8Font("dejavu", "", "DejaVuSans.ttf")
-	pdf.AddUTF8Font("dejavu", "B", "DejaVuSans-Bold.ttf")
-
-	// Set font to verify it works - this may panic if font wasn't added
-	pdf.SetFont("dejavu", "", 10)
-
-	// Write a test cell to ensure rendering works
-	_ = pdf.GetStringWidth("test")
-
-	success = true
-	return
-}
-
-// GenerateContractPDF generates a credit contract PDF matching the template
+// GenerateContractPDF generates a credit contract PDF with proper Cyrillic support
 func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	appID := c.Param("id")
 
@@ -60,51 +35,62 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 		return
 	}
 
-	// Get parameters from query
 	contractNumber := c.DefaultQuery("contract_number", appID)
 	contractDate := c.DefaultQuery("contract_date", time.Now().Format("02.01.2006"))
 	loanAmount := c.DefaultQuery("loan_amount", fmt.Sprintf("%.2f", app.RequestedAmount))
 	loanTerm := c.DefaultQuery("loan_term", strconv.Itoa(app.CreditTerm))
 	interestRate := c.DefaultQuery("interest_rate", "14")
 
-	// Calculate dates
 	today, _ := time.Parse("02.01.2006", contractDate)
-	transferDate := today.AddDate(0, 0, 4)                    // 4 days from contract date
-	repayDate := today.AddDate(0, int(parseInt(loanTerm)), 3) // term months + 3 days
+	transferDate := today.AddDate(0, 0, 4)
+	repayDate := today.AddDate(0, int(parseInt(loanTerm)), 3)
 	repayDateStr := repayDate.Format("02.01.2006")
 	transferDateStr := transferDate.Format("02.01.2006")
 
-	pdf := gofpdf.New("P", "mm", "A4", "fonts/")
+	wd, _ := os.Getwd()
+	fontDir := filepath.Join(wd, "fonts")
+
+	pdf := gofpdf.New("P", "mm", "A4", fontDir)
 	pdf.SetMargins(20, 15, 20)
 	pdf.AddPage()
 
-	// Try to add Cyrillic font
+	// Load UTF-8 Cyrillic font (DejaVu Sans)
 	hasCyrillic := addCyrillicFont(pdf)
 
-	// If font failed, ensure we fall back to Arial for non-Cyrillic text
-	if !hasCyrillic {
-		// Set a default font to avoid "SetFont: undefined font" panic
-		pdf.SetFont("Arial", "", 10)
-	}
+	// Build PDF content with proper Russian text
+	h.buildContractPDF(pdf, app, contractNumber, contractDate, loanAmount, loanTerm, interestRate, repayDateStr, transferDateStr, hasCyrillic)
 
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=contract_%s.pdf", appID))
+	c.Header("Content-Transfer-Encoding", "binary")
+
+	pdf.Output(c.Writer)
+}
+
+func (h *DocumentHandler) buildContractPDF(pdf *gofpdf.Fpdf, app models.CreditApplication, contractNumber, contractDate, loanAmount, loanTerm, interestRate, repayDateStr, transferDateStr string, hasCyrillic bool) {
+	// Use DejaVu Sans for Cyrillic, Arial as fallback
+	fontName := "Arial"
 	if hasCyrillic {
-		pdf.SetFont("dejavu", "", 14)
-	} else {
-		pdf.SetFont("Arial", "", 14)
+		fontName = "dejavu"
 	}
 
-	// Title centered
+	setFont := func(style string, size float64) {
+		pdf.SetFont(fontName, style, size)
+	}
+
+	// Title
+	setFont("B", 14)
 	pdf.Cell(170, 10, fmt.Sprintf("Кредитный договор № %s", contractNumber))
 	pdf.Ln(12)
 
 	// City and date
-	pdf.SetFont("dejavu", "", 10)
+	setFont("", 10)
 	pdf.Cell(85, 6, "г. Москва")
 	pdf.Cell(85, 6, contractDate)
 	pdf.Ln(8)
 
 	// Preamble
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.SetLeftMargin(20)
 
 	clientName := app.ClientName
@@ -123,11 +109,11 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.Ln(3)
 
 	// Section 1
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "1. Предмет Договора")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	amountFormatted := formatAmountClean(loanAmount)
 
 	pdf.MultiCell(0, 5, fmt.Sprintf("1.1. Кредитор до %s передает Заемщику %s ₽ (далее — Кредит), а Заемщик обязуется вернуть Кредитору Кредит и уплатить проценты по нему в порядке, установленном Договором, и в сроки, установленные Договором.", transferDateStr, amountFormatted), "", "J", false)
@@ -138,11 +124,11 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.Ln(3)
 
 	// Section 2
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "2. Срок действия Договора")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.MultiCell(0, 5, "2.1. Договор вступает в силу со дня его подписания обеими сторонами и действует до полного выполнения ими обязательств по Договору.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "2.2. Любая из Сторон вправе в одностороннем порядке расторгнуть Договор по письменному требованию. Об этом нужно письменно уведомить другую Сторону не менее чем за один месяц до даты расторжения Договора.", "", "J", false)
@@ -151,11 +137,11 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.Ln(3)
 
 	// Section 3
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "3. Порядок расчетов")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.MultiCell(0, 5, fmt.Sprintf("3.1. Заемщик возвращает Кредит до %s Кредитору в той форме, в которой получил его.", repayDateStr), "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, fmt.Sprintf("3.2. Заемщик ежемесячно не позднее 10-го числа каждого месяца перечисляет Кредитору платеж по Кредиту в суммах, указанных в приложении № 1 к Договору. Срок кредитования составляет %s месяцев.", loanTerm), "", "J", false)
@@ -166,11 +152,11 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.Ln(3)
 
 	// Section 4
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "4. Ответственность Сторон")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.MultiCell(0, 5, "4.1. За неисполнение или ненадлежащее исполнение обязательств по настоящему Договору Стороны несут ответственность в соответствии с действующим законодательством Российской Федерации.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "4.2. В случае просрочки исполнения Заемщиком обязательств по возврату Кредита и/или уплате процентов, Кредитор вправе потребовать уплаты неустойки (пени) в размере 0,1% от суммы просроченного платежа за каждый день просрочки.", "", "J", false)
@@ -179,33 +165,33 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.Ln(3)
 
 	// Section 5
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "5. Форс-мажор")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.MultiCell(0, 5, "5.1. Стороны освобождаются от ответственности за частичное или полное неисполнение своих обязательств по Договору, если такое неисполнение явилось следствием обстоятельств непреодолимой силы (форс-мажор), возникших после заключения Договора.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "5.2. Сторона, для которой создалась невозможность исполнения обязательств, должна немедленно известить другую Сторону о наступлении и прекращении указанных обстоятельств.", "", "J", false)
 	pdf.Ln(3)
 
 	// Section 6
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "6. Разрешение споров")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.MultiCell(0, 5, "6.1. Все споры и разногласия, возникающие между Сторонами в связи с исполнением обязательств по Договору, разрешаются путем переговоров.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "6.2. В случае невозможности урегулирования споров путем переговоров, они подлежат разрешению в Арбитражном суде города Москвы в соответствии с действующим законодательством Российской Федерации.", "", "J", false)
 	pdf.Ln(3)
 
 	// Section 7
-	pdf.SetFont("dejavu", "B", 12)
+	setFont("B", 12)
 	pdf.Cell(170, 8, "7. Заключительные положения")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 11)
+	setFont("", 11)
 	pdf.MultiCell(0, 5, "7.1. Договор составлен в двух экземплярах, имеющих одинаковую юридическую силу, по одному для каждой из Сторон.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "7.2. Все изменения и дополнения к Договору действительны при условии, если они совершены в письменной форме и подписаны обеими Сторонами.", "", "J", false)
@@ -213,19 +199,17 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.MultiCell(0, 5, "7.3. Приложение № 1 (График погашения Кредита) является неотъемлемой частью Договора.", "", "J", false)
 	pdf.Ln(5)
 
-	// Section 8 - Addresses and Details
-	pdf.SetFont("dejavu", "B", 12)
+	// Section 8 - Addresses
+	setFont("B", 12)
 	pdf.Cell(170, 8, "8. Адреса и реквизиты Сторон")
 	pdf.Ln(7)
 
-	pdf.SetFont("dejavu", "", 10)
-
-	// Creditor column
+	setFont("", 10)
 	pdf.SetX(20)
-	pdf.SetFont("dejavu", "B", 10)
+	setFont("B", 10)
 	pdf.Cell(80, 5, "Кредитор:")
 	pdf.Ln(6)
-	pdf.SetFont("dejavu", "", 10)
+	setFont("", 10)
 	pdf.SetX(20)
 	pdf.Cell(80, 4, "АО «ТБанк»")
 	pdf.Ln(5)
@@ -247,10 +231,10 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 
 	// Borrower column
 	pdf.SetX(110)
-	pdf.SetFont("dejavu", "B", 10)
+	setFont("B", 10)
 	pdf.Cell(80, 5, "Заемщик:")
 	pdf.Ln(6)
-	pdf.SetFont("dejavu", "", 10)
+	setFont("", 10)
 	pdf.SetX(110)
 	pdf.MultiCell(80, 4, clientName, "", "J", false)
 	pdf.Ln(2)
@@ -281,7 +265,7 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 
 	// Signatures
 	pdf.Ln(5)
-	pdf.SetFont("dejavu", "", 10)
+	setFont("", 10)
 	pdf.SetX(20)
 	pdf.Cell(80, 5, "Генеральный директор:")
 	pdf.SetX(110)
@@ -296,16 +280,9 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 
 	// Footer
 	pdf.SetY(-15)
-	pdf.SetFont("dejavu", "", 8)
+	setFont("", 8)
 	pdf.SetTextColor(128, 128, 128)
 	pdf.Cell(0, 5, "Шаблон подготовлен экспертами Бизнес-секретов")
-
-	// Set response headers
-	c.Header("Content-Type", "application/pdf")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=contract_%s.pdf", appID))
-	c.Header("Content-Transfer-Encoding", "binary")
-
-	pdf.Output(c.Writer)
 }
 
 // GeneratePaymentSchedulePDF generates a payment schedule PDF
@@ -336,36 +313,44 @@ func (h *DocumentHandler) GeneratePaymentSchedulePDF(c *gin.Context) {
 	monthlyRate := interestRate / 100 / 12
 	monthlyPayment := loanAmount * (monthlyRate * math.Pow(1+monthlyRate, float64(loanTerm))) / (math.Pow(1+monthlyRate, float64(loanTerm)) - 1)
 
-	pdf := gofpdf.New("P", "mm", "A4", "fonts/")
+	wd, _ := os.Getwd()
+	fontDir := filepath.Join(wd, "fonts")
+	pdf := gofpdf.New("P", "mm", "A4", fontDir)
 	hasCyrillic := addCyrillicFont(pdf)
 
 	pdf.SetMargins(15, 15, 15)
 	pdf.AddPage()
 
+	h.buildSchedulePDF(pdf, app, appID, loanAmountStr, loanTerm, interestRateStr, loanAmount, monthlyPayment, monthlyRate, hasCyrillic)
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=schedule_%s.pdf", appID))
+	c.Header("Content-Transfer-Encoding", "binary")
+
+	pdf.Output(c.Writer)
+}
+
+func (h *DocumentHandler) buildSchedulePDF(pdf *gofpdf.Fpdf, app models.CreditApplication, appID, loanAmountStr string, loanTerm int, interestRateStr string, loanAmount, monthlyPayment, monthlyRate float64, hasCyrillic bool) {
+	fontName := "Arial"
 	if hasCyrillic {
-		pdf.SetFont("dejavu", "B", 14)
-	} else {
-		pdf.SetFont("Arial", "B", 14)
+		fontName = "dejavu"
 	}
 
+	setFont := func(style string, size float64) {
+		pdf.SetFont(fontName, style, size)
+	}
+
+	setFont("B", 14)
 	pdf.Cell(180, 10, "Приложение № 1")
 	pdf.Ln(6)
 	pdf.Cell(180, 10, fmt.Sprintf("к Кредитному договору № %s", appID))
 	pdf.Ln(10)
 
-	if hasCyrillic {
-		pdf.SetFont("dejavu", "B", 14)
-	} else {
-		pdf.SetFont("Arial", "B", 14)
-	}
+	setFont("B", 14)
 	pdf.Cell(180, 10, "График погашения Кредита")
 	pdf.Ln(10)
 
-	if hasCyrillic {
-		pdf.SetFont("dejavu", "", 11)
-	} else {
-		pdf.SetFont("Arial", "", 11)
-	}
+	setFont("", 11)
 
 	clientName := app.ClientName
 	if clientName == "" {
@@ -385,26 +370,16 @@ func (h *DocumentHandler) GeneratePaymentSchedulePDF(c *gin.Context) {
 	pdf.Ln(8)
 
 	// Table header
-	if hasCyrillic {
-		pdf.SetFont("dejavu", "B", 8)
-	} else {
-		pdf.SetFont("Arial", "B", 8)
-	}
-
+	setFont("B", 8)
 	headers := []string{"№ п/п", "Дата платежа", "Сумма платежа", "Основной долг", "Проценты", "Остаток долга"}
-	widths := []float64{15, 30, 30, 30, 25, 50}
+	widths := []float64{15, 28, 30, 28, 25, 54}
 
 	for i, header := range headers {
 		pdf.CellFormat(widths[i], 6, header, "1", 0, "C", false, 0, "")
 	}
 	pdf.Ln(-1)
 
-	// Table data
-	if hasCyrillic {
-		pdf.SetFont("dejavu", "", 7)
-	} else {
-		pdf.SetFont("Arial", "", 7)
-	}
+	setFont("", 7)
 
 	balance := loanAmount
 	totalPayment := 0.0
@@ -432,32 +407,18 @@ func (h *DocumentHandler) GeneratePaymentSchedulePDF(c *gin.Context) {
 		totalPrincipal += principal
 		totalInterest += interest
 
-		// Add new page if needed
 		if i < loanTerm && pdf.GetY() > 270 {
 			pdf.AddPage()
-			if hasCyrillic {
-				pdf.SetFont("dejavu", "B", 8)
-			} else {
-				pdf.SetFont("Arial", "B", 8)
-			}
+			setFont("B", 8)
 			for j, header := range headers {
 				pdf.CellFormat(widths[j], 6, header, "1", 0, "C", false, 0, "")
 			}
 			pdf.Ln(-1)
-			if hasCyrillic {
-				pdf.SetFont("dejavu", "", 7)
-			} else {
-				pdf.SetFont("Arial", "", 7)
-			}
+			setFont("", 7)
 		}
 	}
 
-	// Totals row
-	if hasCyrillic {
-		pdf.SetFont("dejavu", "B", 8)
-	} else {
-		pdf.SetFont("Arial", "B", 8)
-	}
+	setFont("B", 8)
 	pdf.CellFormat(widths[0]+widths[1]+widths[2], 6, "ИТОГО:", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(widths[3], 6, formatAmountClean(fmt.Sprintf("%.2f", totalPrincipal)), "1", 0, "R", true, 0, "")
 	pdf.CellFormat(widths[4], 6, formatAmountClean(fmt.Sprintf("%.2f", totalInterest)), "1", 0, "R", true, 0, "")
@@ -466,15 +427,9 @@ func (h *DocumentHandler) GeneratePaymentSchedulePDF(c *gin.Context) {
 
 	// Footer
 	pdf.SetY(-10)
-	pdf.SetFont("dejavu", "", 8)
+	setFont("", 8)
 	pdf.SetTextColor(128, 128, 128)
 	pdf.Cell(0, 5, "Шаблон подготовлен экспертами Бизнес-секретов")
-
-	c.Header("Content-Type", "application/pdf")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=schedule_%s.pdf", appID))
-	c.Header("Content-Transfer-Encoding", "binary")
-
-	pdf.Output(c.Writer)
 }
 
 // SendDocumentsToClient sends documents to client email
@@ -527,4 +482,33 @@ func parseFloat(s string) float64 {
 func parseInt(s string) int {
 	val, _ := strconv.Atoi(s)
 	return val
+}
+
+// addCyrillicFont loads DejaVu Sans UTF-8 font for proper Cyrillic rendering
+func addCyrillicFont(pdf *gofpdf.Fpdf) (success bool) {
+	success = false
+	defer func() {
+		if r := recover(); r != nil {
+			success = false
+		}
+	}()
+
+	wd, _ := os.Getwd()
+	fontPath := filepath.Join(wd, "fonts", "DejaVuSans.ttf")
+	fontBoldPath := filepath.Join(wd, "fonts", "DejaVuSans-Bold.ttf")
+
+	// Check if font files exist
+	if _, err := os.Stat(fontPath); err != nil {
+		return false
+	}
+
+	// Add UTF-8 font with Cyrillic support
+	pdf.AddUTF8Font("dejavu", "", fontPath)
+	pdf.AddUTF8Font("dejavu", "B", fontBoldPath)
+
+	// Test if font was loaded successfully
+	pdf.SetFont("dejavu", "", 10)
+
+	success = true
+	return
 }
