@@ -30,6 +30,9 @@ COPY --from=builder /app/main .
 # Copy static files
 COPY --from=builder /app/static ./static
 
+# Copy fonts for PDF generation
+COPY --from=builder /app/fonts ./fonts
+
 # Expose port 8080
 EXPOSE 8080
 

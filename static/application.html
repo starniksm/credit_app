@@ -81,6 +81,9 @@
         .payment-status.ok { background: #e8f5e9; color: #2e7d32; }
         .payment-status.delayed { background: #fff8e1; color: #f57f17; }
         .payment-status.critical { background: #ffebee; color: #c62828; }
+        .payment-history { display: grid; gap: 4px; min-width: 170px; }
+        .payment-history-item { color: #424242; font-size: 12px; line-height: 1.35; }
+        .payment-history-item.overdue { color: #c62828; }
         
         /* Spinner */
         .spinner {
@@ -369,7 +372,7 @@
                     <path d="M12 2a10 10 0 0 1 10 10"></path>
                     <circle cx="12" cy="12" r="6"></circle>
                 </svg>
-                Рекомендации ИИ
+                Рекомендательное письмо
             </button>
             <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -491,6 +494,8 @@
                                 <th>Тип кредита</th>
                                 <th>Сумма долга</th>
                                 <th>Ежемесячный платёж</th>
+                                <th>Ближайший платёж</th>
+                                <th>Последние оплаты</th>
                                 <th>Статус платежей</th>
                             </tr>
                         </thead>
@@ -522,7 +527,7 @@
             </div>
         </div>
 
-        <!-- Tab 3: AI Recommendations -->
+        <!-- Tab 3: Recommendation Letter -->
         <div class="tab-content" id="tab-ai">
             <div class="card">
                 <div class="card-header">
@@ -551,11 +556,11 @@
                         <polyline points="2 17 12 22 22 17"></polyline>
                         <polyline points="2 12 12 17 22 12"></polyline>
                     </svg>
-                    <h3>Рекомендации ИИ</h3>
+                    <h3>Рекомендательное письмо</h3>
                 </div>
                 <div class="recommendation-box" id="recommendation-box">
                     <div class="bki-empty" style="padding: 20px; text-align: center;">
-                        <p>Рекомендация ИИ будет сформирована после завершения анализа</p>
+                        <p>Рекомендательное письмо будет сформировано после анализа данных БКИ</p>
                     </div>
                 </div>
             </div>
@@ -570,7 +575,7 @@
                 </div>
                 <div class="factors-grid" id="factors-analysis">
                     <div class="bki-empty" style="padding: 20px; text-align: center;">
-                        <p>Факторы анализа будут доступны после формирования рекомендаций ИИ</p>
+                        <p>Факторы анализа будут доступны после формирования рекомендательного письма</p>
                     </div>
                 </div>
             </div>
@@ -580,11 +585,11 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                     </svg>
-                    <h3>Комментарий ИИ</h3>
+                    <h3>Текст письма</h3>
                 </div>
                 <div id="ai-comment">
                     <div class="bki-empty" style="padding: 20px; text-align: center;">
-                        <p>Комментарий ИИ будет добавлен после завершения автоматического анализа</p>
+                        <p>Письмо будет добавлено после анализа данных БКИ</p>
                     </div>
                 </div>
             </div>
@@ -1479,23 +1484,29 @@
                 `).join('');
 
                 // Active credits
-                const activeCredits = app.active_credits_list ? JSON.parse(app.active_credits_list) : [];
+                const activeCredits = safeParseJSON(app.active_credits_list, []);
                 getElement('active-credits').innerHTML = activeCredits.map(credit => `
                     <tr>
                         <td>${credit.bank || '—'}</td>
                         <td>${credit.type || '—'}</td>
                         <td>${formatCurrency(credit.amount || credit.debt || 0)}</td>
                         <td>${formatCurrency(credit.monthlyPayment || credit.monthly_payment || 0)}</td>
+                        <td>${formatBkiDate(credit.next_payment_date) || (credit.payment_day ? `${credit.payment_day} число` : '—')}</td>
+                        <td>${formatPaymentHistory(credit.payment_history || [])}</td>
                         <td><span class="payment-status ${getPaymentStatusClass(credit.payment_status || '')}">${getPaymentStatusText(credit.payment_status || '')}</span></td>
                     </tr>
                 `).join('');
 
                 // Delinquency data
+                const delinquencyHistory = safeParseJSON(app.delinquency_history, []);
+                const delinquencySummary = delinquencyHistory.length
+                    ? delinquencyHistory.map(item => `${item.date || '—'}: ${item.days || 0} дн., ${item.resolved ? 'закрыта' : 'текущая'}`).join('<br>')
+                    : 'Нет просрочек';
                 const delinquencyData = [
                     { label: 'Просрочки за 12 мес.', value: app.delayed_payments_12m || 0 },
                     { label: 'Макс. просрочка', value: app.max_delinquency_days ? app.max_delinquency_days + ' дней' : '—' },
                     { label: 'Текущие просрочки', value: app.current_delinquencies ? 'Да' : 'Нет' },
-                    { label: 'История просрочек', value: app.delinquency_history || '—' }
+                    { label: 'История просрочек', value: delinquencySummary }
                 ];
 
                 getElement('delinquency-data').innerHTML = delinquencyData.map(item => `
@@ -1508,10 +1519,11 @@
                 `).join('');
 
                 // Additional BKI info
+                const debtDetails = safeParseJSON(app.debt_burden_details, null);
                 const additionalInfo = [
                     { label: 'Доступный лимит', value: formatCurrency(app.available_credit_limit || 0) },
-                    { label: 'Коэффициент долговой нагрузки', value: app.debt_burden_ratio ? (app.debt_burden_ratio * 100).toFixed(1) + '%' : '—' },
-                    { label: 'Детали долговой нагрузки', value: app.debt_burden_details || '—' }
+                    { label: 'Коэффициент долговой нагрузки', value: app.dti_ratio ? (app.dti_ratio * 100).toFixed(1) + '%' : '—' },
+                    { label: 'Ежемесячные платежи по действующим кредитам', value: debtDetails ? formatCurrency(debtDetails.total_monthly_payments || 0) : '—' }
                 ];
 
                 getElement('bki-additional').innerHTML = additionalInfo.map(item => `
@@ -1554,13 +1566,56 @@
             return statusMap[status.toLowerCase()] || status;
         }
 
-        // Render AI Tab
-        function renderAITab(app) {
-            // Check if we have AI data
-            const hasAIData = app.ai_score > 0 || app.ai_recommendation || app.risk_score;
+        function formatBkiDate(value) {
+            if (!value) return '';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            return date.toLocaleDateString('ru-RU');
+        }
 
-            if (!hasAIData) {
-                // Show empty state with button to request AI analysis
+        function formatPaymentHistory(history) {
+            if (!Array.isArray(history) || history.length === 0) return '—';
+            return `
+                <div class="payment-history">
+                    ${history.slice(0, 4).map(item => {
+                        const date = item.payment_date ? formatBkiDate(item.payment_date) : 'не оплачено';
+                        const delay = item.days_delay ? `, задержка ${item.days_delay} дн.` : '';
+                        const className = item.status === 'overdue' ? 'payment-history-item overdue' : 'payment-history-item';
+                        return `<div class="${className}">${date}: ${formatCurrency(item.amount || 0)}${delay}</div>`;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function safeParseJSON(value, fallback) {
+            if (!value) return fallback;
+            if (typeof value !== 'string') return value;
+            try {
+                return JSON.parse(value);
+            } catch (e) {
+                console.error('JSON parse error:', e, value);
+                return fallback;
+            }
+        }
+
+        // Render Recommendation Letter Tab
+        function renderAITab(app) {
+            const hasLetter = app.recommendation_reason === 'recommendation_letter';
+            const hasBKIData = app.credit_score > 0 || app.credit_history_score > 0;
+
+            if (!hasLetter) {
+                const buttonHTML = hasBKIData
+                    ? `<button class="action-btn start" id="recommendation-letter-btn" data-app-id="${app.id}" onclick="window.requestAIRecommendation(this.dataset.appId)" style="padding: 12px 24px; font-size: 15px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                            Получить рекомендательное письмо
+                        </button>`
+                    : `<button class="action-btn view" onclick="switchTab('bki')" style="padding: 12px 24px; font-size: 15px;">Перейти к данным БКИ</button>`;
+
                 getElement('tab-ai').innerHTML = `
                     <div class="card">
                         <div class="card-header">
@@ -1569,7 +1624,7 @@
                                 <path d="M12 2a10 10 0 0 1 10 10"></path>
                                 <circle cx="12" cy="12" r="6"></circle>
                             </svg>
-                            <h3>Рекомендации ИИ</h3>
+                            <h3>Рекомендательное письмо</h3>
                         </div>
                         <div class="bki-empty" style="padding: 40px 20px; text-align: center;">
                             <svg viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5" style="width: 64px; height: 64px; margin: 0 auto 16px;">
@@ -1577,14 +1632,9 @@
                                 <path d="M12 16v-4"></path>
                                 <path d="M12 8h.01"></path>
                             </svg>
-                            <p style="color: #666; margin-bottom: 20px; font-size: 15px;">Рекомендация ИИ ещё не запрошена</p>
-                            <p style="color: #999; margin-bottom: 24px; font-size: 13px;">Для получения рекомендации необходимо проанализировать кредитную историю клиента и провести скоринговый анализ</p>
-                            <button class="action-btn start" onclick="requestAIRecommendation('${app.id}')" style="padding: 12px 24px; font-size: 15px;">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;">
-                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                                </svg>
-                                Запросить рекомендацию ИИ
-                            </button>
+                            <p style="color: #666; margin-bottom: 20px; font-size: 15px;">Рекомендательное письмо ещё не сформировано</p>
+                            <p style="color: #999; margin-bottom: 24px; font-size: 13px;">${hasBKIData ? 'Алгоритм кратко изучит кредитную историю и прочие данные клиента и укажет, стоит ли одобрить заявку.' : 'Сначала запросите данные БКИ клиента.'}</p>
+                            ${buttonHTML}
                         </div>
                     </div>
                 `;
@@ -1628,13 +1678,13 @@
 
             // Render recommendation
             let recommendationClass = 'review';
-            let recommendationText = 'На рассмотрении';
+            let recommendationText = 'Требуется проверка';
             if (app.ai_recommendation === 'approve') {
                 recommendationClass = 'approve';
-                recommendationText = 'Рекомендовано к одобрению';
+                recommendationText = 'Стоит одобрить заявку';
             } else if (app.ai_recommendation === 'reject') {
                 recommendationClass = 'reject';
-                recommendationText = 'Рекомендовано к отклонению';
+                recommendationText = 'Не стоит одобрять заявку';
             }
 
             // Render factors analysis
@@ -1688,7 +1738,7 @@
                                 <polyline points="2 17 12 22 22 17"></polyline>
                                 <polyline points="2 12 12 17 22 12"></polyline>
                             </svg>
-                            <h3>Рекомендации ИИ</h3>
+                            <h3>Заключение</h3>
                         </div>
                         <div class="recommendation-box ${recommendationClass}">
                             <div class="recommendation-text">${recommendationText}</div>
@@ -1704,7 +1754,7 @@
                             </svg>
                             <h3>Факторы анализа</h3>
                         </div>
-                        ${factorsAnalysisHTML || '<div class="bki-empty" style="padding:20px"><p>Факторы анализа будут доступны после формирования рекомендаций ИИ</p></div>'}
+                        ${factorsAnalysisHTML || '<div class="bki-empty" style="padding:20px"><p>Факторы анализа будут доступны после формирования рекомендательного письма</p></div>'}
                     </div>
 
                     <div class="card">
@@ -1712,9 +1762,9 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                             </svg>
-                            <h3>Комментарий ИИ</h3>
+                            <h3>Краткий вывод по БКИ</h3>
                         </div>
-                        <div>${app.ai_comment ? `<div style="padding:15px;background:#f5f5f5;border-radius:8px;">${app.ai_comment}</div>` : '<div class="bki-empty" style="padding:20px"><p>Комментарий ИИ будет добавлен после завершения автоматического анализа</p></div>'}</div>
+                        <div>${app.ai_comment ? `<div style="padding:18px;background:#f5f5f5;border-radius:8px;white-space:pre-line;line-height:1.7;">${app.ai_comment}</div>` : '<div class="bki-empty" style="padding:20px"><p>Письмо будет добавлено после анализа данных БКИ</p></div>'}</div>
                     </div>
                 `;
             }
@@ -1762,6 +1812,9 @@
                     case 'documents_requested':
                         actionText = 'Запрос документов';
                         break;
+                    case 'recommendation_letter':
+                        actionText = 'Рекомендательное письмо';
+                        break;
                     default:
                         actionText = action.type;
                 }
@@ -1807,10 +1860,11 @@
             getElement('summary-documents').innerHTML = summaryHtml;
         }
 
-        // Request AI Recommendation
-        async function requestAIRecommendation(appId) {
-            if (!token) {
-                alert('Необходима авторизация');
+        // Request Recommendation Letter
+        window.requestAIRecommendation = async function(appId) {
+            const authToken = localStorage.getItem('adminToken');
+            if (!authToken) {
+                showNotification('Необходима авторизация', 'error');
                 return;
             }
 
@@ -1823,45 +1877,47 @@
                             <path d="M12 2a10 10 0 0 1 10 10"></path>
                             <circle cx="12" cy="12" r="6"></circle>
                         </svg>
-                        <h3>Рекомендации ИИ</h3>
+                        <h3>Рекомендательное письмо</h3>
                     </div>
                     <div style="padding: 40px 20px; text-align: center;">
                         <div style="display: inline-block; width: 48px; height: 48px; border: 4px solid #e0e0e0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
-                        <p style="color: #666; font-size: 15px;">ИИ анализирует кредитную историю клиента...</p>
-                        <p style="color: #999; font-size: 13px; margin-top: 8px;">Проводится скоринговый анализ</p>
+                        <p style="color: #666; font-size: 15px;">Формируется рекомендательное письмо...</p>
+                        <p style="color: #999; font-size: 13px; margin-top: 8px;">Алгоритм анализирует данные БКИ</p>
                     </div>
                 </div>
             `;
 
             try {
-                const response = await fetch(`${API_URL}/api/admin/applications/${appId}/ai-recommendation`, {
+                const response = await fetch(`/api/admin/applications/${encodeURIComponent(appId)}/ai-recommendation`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { 'Authorization': `Bearer ${authToken}` }
                 });
 
                 const data = await response.json();
 
-                if (data && data.recommendation) {
-                    // Update currentApp with new AI data
+                if (response.ok && data && data.recommendation) {
+                    // Update currentApp with the recommendation letter data
                     currentApp.ai_recommendation = data.recommendation;
                     currentApp.ai_comment = data.comment || '';
                     currentApp.ai_score = data.score || 0;
+                    currentApp.recommendation_reason = 'recommendation_letter';
                     currentApp.risk_score = data.risk_score || 0;
                     currentApp.credit_score = data.credit_score || 0;
                     currentApp.factors_analysis = data.factors || '[]';
 
-                    // Re-render AI tab
+                    // Re-render recommendation letter tab
                     renderAITab(currentApp);
+                    showNotification('Краткий вывод сформирован', 'success');
                 } else {
-                    alert('Ошибка при получении рекомендации ИИ');
+                    showNotification((data && data.error) || 'Ошибка при получении рекомендательного письма', 'error');
                     renderAITab(currentApp);
                 }
             } catch (err) {
-                console.error('AI recommendation error:', err);
-                alert('Ошибка при запросе рекомендации ИИ');
+                console.error('Recommendation letter error:', err);
+                showNotification('Ошибка при запросе рекомендательного письма: ' + (err.message || 'неизвестная ошибка'), 'error');
                 renderAITab(currentApp);
             }
-        }
+        };
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {

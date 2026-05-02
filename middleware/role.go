@@ -28,7 +28,7 @@ func AnalystOnly() gin.HandlerFunc {
 	return RoleMiddleware("analyst", "admin")
 }
 
-// RepresentativeOnly middleware - allows only representatives
+// RepresentativeOnly middleware - allows representatives and admins
 func RepresentativeOnly() gin.HandlerFunc {
-	return RoleMiddleware("representative")
+	return RoleMiddleware("representative", "admin")
 }

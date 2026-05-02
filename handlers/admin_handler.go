@@ -65,16 +65,26 @@ func (h *AdminHandler) StartReview(c *gin.Context) {
 		return
 	}
 
-	// Get user ID from token (admin ID)
-	adminID := c.GetString("user_id")
-	if adminID == "" {
-		adminID = "admin"
+	reviewerID := "admin"
+	if userID := c.GetUint("user_id"); userID != 0 {
+		reviewerID = fmt.Sprintf("%d", userID)
 	}
 
 	// Get username from context
 	username := c.GetString("username")
 	if username == "" {
 		username = "Администратор"
+	}
+	analystName := username
+	if userID := c.GetUint("user_id"); userID != 0 {
+		var user models.User
+		if err := h.service.GetDB().First(&user, userID).Error; err == nil {
+			if user.FullName != "" {
+				analystName = user.FullName
+			} else if user.Username != "" {
+				analystName = user.Username
+			}
+		}
 	}
 
 	// Get the existing application
@@ -97,10 +107,11 @@ func (h *AdminHandler) StartReview(c *gin.Context) {
 	now := time.Now()
 	application.Status = "in_review"
 	application.ReviewStartedAt = &now
-	application.ReviewerID = adminID
+	application.ReviewerID = reviewerID
+	application.AnalystName = analystName
 
 	// Add action to history
-	application.AddActionToHistory("started_review", username, "Начало проверки заявки")
+	application.AddActionToHistory("started_review", analystName, "Начало проверки заявки")
 
 	result, err := h.service.UpdateApplication(id, application)
 	if err != nil {
@@ -148,6 +159,18 @@ func (h *AdminHandler) UpdateApplicationStatus(c *gin.Context) {
 
 	// Update the status
 	application.Status = req.Status
+	if req.Status == "approved" {
+		if application.ApprovedAmount <= 0 || application.ApprovedAmount > application.RequestedAmount {
+			application.ApprovedAmount = application.RequestedAmount
+		}
+	}
+	if req.Status == "approved" || req.Status == "rejected" {
+		now := time.Now()
+		if application.ReviewStartedAt == nil {
+			application.ReviewStartedAt = &now
+		}
+		application.ReviewCompletedAt = &now
+	}
 
 	// Add action to history
 	actionDetails := "Изменение статуса на: " + req.Status
@@ -278,6 +301,11 @@ func (h *AdminHandler) MakeDecision(c *gin.Context) {
 	if req.Decision == "approved" {
 		application.ApprovedAmount = application.RequestedAmount
 	}
+	now := time.Now()
+	if application.ReviewStartedAt == nil {
+		application.ReviewStartedAt = &now
+	}
+	application.ReviewCompletedAt = &now
 
 	// Set decision reason
 	application.DecisionReason = req.Reason
@@ -331,6 +359,54 @@ func getReasonText(reason string) string {
 		return text
 	}
 	return reason
+}
+
+func approvedAmountExpr() string {
+	return "COALESCE(SUM(requested_amount), 0)"
+}
+
+func avgProcessingMinutes(db *gorm.DB, query string, args ...interface{}) float64 {
+	var value float64
+	db.Model(&models.CreditApplication{}).
+		Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL").
+		Where(query, args...).
+		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (review_completed_at - review_started_at)) / 60), 0)").
+		Scan(&value)
+	return value
+}
+
+func periodRange(period string, now time.Time) (time.Time, time.Time) {
+	location := now.Location()
+	switch period {
+	case "lastMonth":
+		start := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, location)
+		return start, time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, location)
+	case "quarter":
+		month := (int(now.Month())-1)/3*3 + 1
+		start := time.Date(now.Year(), time.Month(month), 1, 0, 0, 0, 0, location)
+		return start, start.AddDate(0, 3, 0)
+	case "year":
+		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, location)
+		return start, start.AddDate(1, 0, 0)
+	default:
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, location)
+		return start, start.AddDate(0, 1, 0)
+	}
+}
+
+func previousPeriodRange(start, end time.Time) (time.Time, time.Time) {
+	duration := end.Sub(start)
+	return start.Add(-duration), start
+}
+
+func percentChange(current, previous float64) float64 {
+	if previous == 0 {
+		if current == 0 {
+			return 0
+		}
+		return 100
+	}
+	return (current - previous) * 100 / previous
 }
 
 // GetReportsData returns data for the reports dashboard
@@ -405,30 +481,62 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 
 	// Calculate approved amount
 	var totalApproved float64
-	db.Model(&models.CreditApplication{}).Where("status = ?", "approved").Select("COALESCE(SUM(approved_amount), 0)").Scan(&totalApproved)
+	db.Model(&models.CreditApplication{}).Where("status = ?", "approved").Select(approvedAmountExpr()).Scan(&totalApproved)
 	reportsData.ApprovedAmount = totalApproved
 
 	// Calculate average processing time
-	var totalTime float64
-	var count int64
-	db.Model(&models.CreditApplication{}).Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL").Count(&count)
-	if count > 0 {
-		db.Model(&models.CreditApplication{}).Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL").Select("COALESCE(AVG(EXTRACT(EPOCH FROM (review_completed_at - review_started_at)) / 86400), 0)").Scan(&totalTime)
-		reportsData.AvgProcessingTime = totalTime
-	} else {
-		reportsData.AvgProcessingTime = 3.5
-	}
+	reportsData.AvgProcessingTime = avgProcessingMinutes(db, "1 = 1")
 
 	// Status distribution
-	reportsData.StatusDistribution = []struct {
+	var statuses []struct {
+		Status string
+		Count  int64
+	}
+	db.Model(&models.CreditApplication{}).Select("status, COUNT(*) as count").Group("status").Scan(&statuses)
+	statusNames := map[string]string{
+		"new":                 "Новые",
+		"in_review":           "В работе",
+		"approved":            "Одобрено",
+		"rejected":            "Отклонено",
+		"manual_review":       "Ручная проверка",
+		"pending":             "Ожидает",
+		"documents_requested": "Запрошены документы",
+		"revision":            "На доработке",
+	}
+	statusColors := map[string]string{
+		"new":                 "#17a2b8",
+		"in_review":           "#ffc107",
+		"approved":            "#28a745",
+		"rejected":            "#dc3545",
+		"manual_review":       "#6f42c1",
+		"pending":             "#6c757d",
+		"documents_requested": "#fd7e14",
+		"revision":            "#20c997",
+	}
+
+	reportsData.StatusDistribution = make([]struct {
 		Status string `json:"status"`
 		Count  int64  `json:"count"`
 		Color  string `json:"color"`
-	}{
-		{Status: "Новые", Count: reportsData.New, Color: "#17a2b8"},
-		{Status: "В работе", Count: reportsData.InReview, Color: "#ffc107"},
-		{Status: "Одобрено", Count: reportsData.Approved, Color: "#28a745"},
-		{Status: "Отклонено", Count: reportsData.Rejected, Color: "#dc3545"},
+	}, len(statuses))
+	for i, status := range statuses {
+		name := statusNames[status.Status]
+		if name == "" {
+			name = status.Status
+		}
+		color := statusColors[status.Status]
+		if color == "" {
+			color = "#6c757d"
+		}
+		reportsData.StatusDistribution[i] = struct {
+			Status string `json:"status"`
+			Count  int64  `json:"count"`
+			Color  string `json:"color"`
+		}{
+			Status: name,
+			Count:  status.Count,
+			Color:  color,
+		}
 	}
 
 	// Credit types
@@ -437,7 +545,11 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 		Count          int64
 		ApprovedAmount float64
 	}
-	db.Model(&models.CreditApplication{}).Select("credit_type as credit_type, COUNT(*) as count, COALESCE(SUM(approved_amount), 0) as approved_amount").Group("credit_type").Scan(&creditTypes)
+	db.Model(&models.CreditApplication{}).
+		Select("credit_type as credit_type, COUNT(*) as count, "+approvedAmountExpr()+" as approved_amount").
+		Where("status = ?", "approved").
+		Group("credit_type").
+		Scan(&creditTypes)
 
 	var totalCount int64
 	for _, ct := range creditTypes {
@@ -454,6 +566,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 	creditTypeMap := map[string]string{
 		"ПК": "Потребительский",
 		"АВ": "Автокредит",
+		"АК": "Автокредит",
 		"ИП": "Ипотека",
 		"КК": "Кредитная карта",
 		"БК": "Бизнес-кредит",
@@ -502,14 +615,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 		db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "approved", monthStart, monthEnd).Count(&approved)
 		db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "rejected", monthStart, monthEnd).Count(&rejected)
 
-		avgTime := 3.5
-		var timeCount int64
-		db.Model(&models.CreditApplication{}).Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL AND review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd).Count(&timeCount)
-		if timeCount > 0 {
-			var totalTimeSec float64
-			db.Model(&models.CreditApplication{}).Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL AND review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd).Select("COALESCE(AVG(EXTRACT(EPOCH FROM (review_completed_at - review_started_at)) / 86400), 0)").Scan(&totalTimeSec)
-			avgTime = totalTimeSec
-		}
+		avgTime := avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd)
 
 		reportsData.MonthlyStats[5-i] = struct {
 			Month          string  `json:"month"`
@@ -546,12 +652,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 		}, len(analysts))
 		for i, a := range analysts {
 			// Calculate average processing time for this analyst
-			var avgTime float64 = 3.5
-			var timeCount int64
-			db.Model(&models.CreditApplication{}).Where("analyst_name = ? AND review_started_at IS NOT NULL AND review_completed_at IS NOT NULL", a.AnalystName).Count(&timeCount)
-			if timeCount > 0 {
-				db.Model(&models.CreditApplication{}).Where("analyst_name = ? AND review_started_at IS NOT NULL AND review_completed_at IS NOT NULL", a.AnalystName).Select("COALESCE(AVG(EXTRACT(EPOCH FROM (review_completed_at - review_started_at)) / 86400), 0)").Scan(&avgTime)
-			}
+			avgTime := avgProcessingMinutes(db, "analyst_name = ?", a.AnalystName)
 
 			// Calculate rating based on approval rate
 			rating := 4.0
@@ -587,12 +688,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 			Rejected     int64   `json:"rejected"`
 			AvgTime      float64 `json:"avgTime"`
 			Rating       float64 `json:"rating"`
-		}{
-			{Name: "Александр Петров", Applications: 89, Approved: 67, Rejected: 15, AvgTime: 3.2, Rating: 4.8},
-			{Name: "Мария Иванова", Applications: 102, Approved: 78, Rejected: 18, AvgTime: 2.9, Rating: 4.9},
-			{Name: "Дмитрий Сидоров", Applications: 76, Approved: 52, Rejected: 14, AvgTime: 4.1, Rating: 4.5},
-			{Name: "Елена Смирнова", Applications: 94, Approved: 71, Rejected: 16, AvgTime: 3.5, Rating: 4.7},
-		}
+		}{}
 	}
 
 	// Risk distribution based on risk_score
@@ -637,14 +733,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 			rate = float64(approved) * 100.0 / float64(totalApps)
 		}
 
-		avgTime := 3.5
-		var timeCount int64
-		db.Model(&models.CreditApplication{}).Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL AND review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd).Count(&timeCount)
-		if timeCount > 0 {
-			var totalTimeSec float64
-			db.Model(&models.CreditApplication{}).Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL AND review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd).Select("COALESCE(AVG(EXTRACT(EPOCH FROM (review_completed_at - review_started_at)) / 86400), 0)").Scan(&totalTimeSec)
-			avgTime = totalTimeSec
-		}
+		avgTime := avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd)
 
 		reportsData.ApprovalRate[5-i] = struct {
 			Month string  `json:"month"`
@@ -756,27 +845,14 @@ func (h *AdminHandler) GetMetricsByPeriod(c *gin.Context) {
 	}
 
 	now := time.Now()
-	var startDate time.Time
+	startDate, endDate := periodRange(period, now)
+	prevStartDate, prevEndDate := previousPeriodRange(startDate, endDate)
 
-	switch period {
-	case "currentMonth":
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	case "lastMonth":
-		startDate = time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location())
-	case "quarter":
-		month := (int(now.Month())-1)/3*3 + 1
-		startDate = time.Date(now.Year(), time.Month(month), 1, 0, 0, 0, 0, now.Location())
-	case "year":
-		startDate = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
-	default:
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	}
-
-	db.Model(&models.CreditApplication{}).Where("created_at >= ?", startDate).Count(&metrics.TotalApplications)
-	db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ?", "approved", startDate).Count(&metrics.Approved)
+	db.Model(&models.CreditApplication{}).Where("created_at >= ? AND created_at < ?", startDate, endDate).Count(&metrics.TotalApplications)
+	db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "approved", startDate, endDate).Count(&metrics.Approved)
 
 	var totalAmount float64
-	db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ?", "approved", startDate).Select("COALESCE(SUM(approved_amount), 0)").Scan(&totalAmount)
+	db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "approved", startDate, endDate).Select(approvedAmountExpr()).Scan(&totalAmount)
 	metrics.ApprovedAmount = totalAmount
 
 	metrics.ApprovalRate = 0
@@ -784,14 +860,25 @@ func (h *AdminHandler) GetMetricsByPeriod(c *gin.Context) {
 		metrics.ApprovalRate = float64(metrics.Approved) * 100.0 / float64(metrics.TotalApplications)
 	}
 
-	metrics.AvgProcessingTime = 3.5
+	metrics.AvgProcessingTime = avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", startDate, endDate)
 
-	// Calculate changes (mock for now)
-	metrics.Changes.TotalApplications = 12.5
-	metrics.Changes.Approved = 15.2
-	metrics.Changes.ApprovedAmount = 18.3
-	metrics.Changes.AvgProcessingTime = -8.5
-	metrics.Changes.ApprovalRate = 2.1
+	var prevTotalApplications, prevApproved int64
+	var prevApprovedAmount float64
+	db.Model(&models.CreditApplication{}).Where("created_at >= ? AND created_at < ?", prevStartDate, prevEndDate).Count(&prevTotalApplications)
+	db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "approved", prevStartDate, prevEndDate).Count(&prevApproved)
+	db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "approved", prevStartDate, prevEndDate).Select(approvedAmountExpr()).Scan(&prevApprovedAmount)
+
+	prevApprovalRate := 0.0
+	if prevTotalApplications > 0 {
+		prevApprovalRate = float64(prevApproved) * 100.0 / float64(prevTotalApplications)
+	}
+	prevAvgProcessingTime := avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", prevStartDate, prevEndDate)
+
+	metrics.Changes.TotalApplications = percentChange(float64(metrics.TotalApplications), float64(prevTotalApplications))
+	metrics.Changes.Approved = percentChange(float64(metrics.Approved), float64(prevApproved))
+	metrics.Changes.ApprovedAmount = percentChange(metrics.ApprovedAmount, prevApprovedAmount)
+	metrics.Changes.AvgProcessingTime = percentChange(metrics.AvgProcessingTime, prevAvgProcessingTime)
+	metrics.Changes.ApprovalRate = metrics.ApprovalRate - prevApprovalRate
 
 	c.JSON(http.StatusOK, metrics)
 }
@@ -874,7 +961,7 @@ type AIRecommendationRequest struct {
 	// No body needed, all info comes from the application
 }
 
-// GenerateAIRecommendation performs AI analysis on an application
+// GenerateAIRecommendation builds a recommendation letter from BKI data.
 func (h *AdminHandler) GenerateAIRecommendation(c *gin.Context) {
 	appID := c.Param("id")
 	db := h.service.GetDB()
@@ -885,48 +972,141 @@ func (h *AdminHandler) GenerateAIRecommendation(c *gin.Context) {
 		return
 	}
 
-	// Perform scoring analysis
-	totalScore, err := utils.CalculateScoring(&app)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при расчёте скоринга"})
-		return
+	dti := app.DTIRatio
+	if dti == 0 {
+		dti = app.DebtBurdenRatio
 	}
 
-	score := int(totalScore)
+	currentDelinquency := app.CurrentDelinquencies
+	maxDelinquencyDays := app.MaxDelinquencyDays
+	totalDebt := app.TotalDebt
+	var activeCredits []map[string]interface{}
+	if app.ActiveCreditsList != "" {
+		_ = json.Unmarshal([]byte(app.ActiveCreditsList), &activeCredits)
+		for _, credit := range activeCredits {
+			if debt, ok := credit["debt"].(float64); ok && totalDebt == 0 {
+				totalDebt += debt
+			}
+			if days, ok := credit["days_overdue"].(float64); ok {
+				if int(days) > maxDelinquencyDays {
+					maxDelinquencyDays = int(days)
+				}
+				if days > 0 {
+					currentDelinquency = true
+				}
+			}
+			if status, ok := credit["payment_status"].(string); ok && (status == "delayed" || status == "critical") {
+				currentDelinquency = true
+			}
+		}
+	}
 
-	// Determine recommendation based on score
-	var recommendation string
-	var comment string
+	creditComponent := (app.CreditScore - 300) * 40 / 550
+	if creditComponent < 0 {
+		creditComponent = 0
+	}
+	if creditComponent > 40 {
+		creditComponent = 40
+	}
 
-	if score >= 70 {
+	paymentComponent := 25
+	if app.DelayedPayments12m > 0 {
+		paymentComponent -= app.DelayedPayments12m * 3
+	}
+	if currentDelinquency {
+		paymentComponent -= 10
+	}
+	if maxDelinquencyDays > 90 {
+		paymentComponent -= 10
+	}
+	if paymentComponent < 0 {
+		paymentComponent = 0
+	}
+
+	debtComponent := 20
+	if dti > 0.6 {
+		debtComponent = 0
+	} else if dti > 0.5 {
+		debtComponent = 5
+	} else if dti > 0.4 {
+		debtComponent = 10
+	} else if dti > 0.3 {
+		debtComponent = 15
+	}
+
+	incomeComponent := 5
+	if app.MonthlyIncome <= 0 || (app.RequestedAmount > 0 && app.MonthlyIncome > 0 && app.RequestedAmount/app.MonthlyIncome > 12) {
+		incomeComponent = 0
+	}
+
+	score := creditComponent + paymentComponent + debtComponent + incomeComponent + 10
+	if score > 100 {
+		score = 100
+	}
+
+	hardStopReasons := []string{}
+	if app.CreditScore < 550 {
+		hardStopReasons = append(hardStopReasons, "кредитный рейтинг ниже 550")
+	}
+	if currentDelinquency {
+		hardStopReasons = append(hardStopReasons, "есть текущие просрочки по кредитам")
+	}
+	if maxDelinquencyDays > 90 {
+		hardStopReasons = append(hardStopReasons, "были просрочки свыше 90 дней")
+	}
+	if app.DelayedPayments12m >= 6 {
+		hardStopReasons = append(hardStopReasons, "6 и более просрочек за последние 12 месяцев")
+	}
+	if dti > 0.6 {
+		hardStopReasons = append(hardStopReasons, "долговая нагрузка превышает 60% дохода")
+	}
+
+	recommendation := "reject"
+	decisionText := "не одобрять заявку"
+	if score >= 70 && len(hardStopReasons) == 0 {
 		recommendation = "approve"
-		comment = fmt.Sprintf("На основе комплексного анализа кредитной истории и финансовых данных клиента рекомендуется одобрение заявки. Общий скоринговый балл: %d. Кредитный рейтинг клиента позволяет предложить конкурентные условия кредитования. Долговая нагрузка находится в допустимых пределах.", score)
-	} else if score >= 40 {
-		recommendation = "review"
-		comment = fmt.Sprintf("Требуется дополнительное рассмотрение. Общий скоринговый балл: %d. Некоторые факторы вызывают сомнения. Рекомендуется запросить дополнительные документы или провести личное собеседование с клиентом.", score)
-	} else {
-		recommendation = "reject"
-		comment = fmt.Sprintf("На основе анализа данных клиента рекомендуется отклонение заявки. Общий скоринговый балл: %d. Выявлены существенные факторы риска, не позволяющие одобрить кредит на запрашиваемых условиях.", score)
+		decisionText = "одобрить заявку"
 	}
 
-	// Generate factors analysis based on application data
+	letterParts := []string{
+		fmt.Sprintf("БКИ-анализ: рейтинг %d, активных кредитов %d, просрочек за 12 месяцев %d, максимальная просрочка %d дней, долговая нагрузка %.1f%%.",
+			app.CreditScore, app.ActiveCredits, app.DelayedPayments12m, maxDelinquencyDays, dti*100),
+	}
+	if len(hardStopReasons) > 0 {
+		letterParts = append(letterParts, "Ключевые риски: "+strings.Join(hardStopReasons, "; ")+".")
+	} else {
+		letterParts = append(letterParts, "Критических просрочек не выявлено, долговая нагрузка допустимая, профиль БКИ соответствует минимальным требованиям.")
+	}
+	letterParts = append(letterParts, fmt.Sprintf("Вывод: %s.", decisionText))
+
+	comment := strings.Join(letterParts, "\n\n")
+
+	activeCreditsValue := 100 - app.ActiveCredits*8
+	if activeCreditsValue < 0 {
+		activeCreditsValue = 0
+	}
+
 	factors := []map[string]interface{}{
-		{"text": "Кредитный рейтинг", "value": app.CreditScore, "type": "credit"},
-		{"text": "Стабильность дохода", "value": app.IncomeStabilityScore, "type": "income"},
-		{"text": "Кредитная нагрузка", "value": app.DebtBurdenScore, "type": "debt"},
-		{"text": "Возрастной фактор", "value": app.AgeFactorScore, "type": "age"},
-		{"text": "Занятость", "value": app.EmploymentScore, "type": "employment"},
+		{"text": fmt.Sprintf("Кредитный рейтинг БКИ (%d)", app.CreditScore), "value": creditComponent * 100 / 40, "type": "credit"},
+		{"text": fmt.Sprintf("Платёжная дисциплина: %d просрочек за 12 месяцев", app.DelayedPayments12m), "value": paymentComponent * 100 / 25, "type": "payment"},
+		{"text": fmt.Sprintf("Долговая нагрузка %.1f%%", dti*100), "value": debtComponent * 100 / 20, "type": "debt"},
+		{"text": fmt.Sprintf("Активные кредиты: %d, общий долг: %.0f ₽", app.ActiveCredits, totalDebt), "value": activeCreditsValue, "type": "active_credits"},
+		{"text": fmt.Sprintf("Доход и сумма кредита: %.0f ₽ / %.0f ₽", app.MonthlyIncome, app.RequestedAmount), "value": incomeComponent * 100 / 5, "type": "income"},
 	}
 
 	factorsJSON, _ := json.Marshal(factors)
 
-	// Update application with AI data
+	// Store the generated letter in existing recommendation fields.
 	app.AIScore = score
 	app.AIRecommendation = recommendation
 	app.AIComment = comment
-	app.RiskScore = score
+	app.RecommendationReason = "recommendation_letter"
+	app.RiskScore = 100 - score
+	app.FactorsAnalysis = string(factorsJSON)
+	app.CurrentDelinquencies = currentDelinquency
+	app.MaxDelinquencyDays = maxDelinquencyDays
+	app.TotalDebt = totalDebt
 
-	// Save positive and risk factors
 	var positiveFactors []string
 	var riskFactors []string
 
@@ -938,10 +1118,16 @@ func (h *AdminHandler) GenerateAIRecommendation(c *gin.Context) {
 		riskFactors = append(riskFactors, "Низкий кредитный рейтинг")
 	}
 
-	if app.MonthlyIncome > 0 && app.RequestedAmount/app.MonthlyIncome < 3 {
-		positiveFactors = append(positiveFactors, "Достаточный уровень дохода")
-	} else {
-		riskFactors = append(riskFactors, "Высокая кредитная нагрузка относительно дохода")
+	if dti <= 0.4 {
+		positiveFactors = append(positiveFactors, "Допустимая долговая нагрузка")
+	} else if dti > 0.5 {
+		riskFactors = append(riskFactors, "Высокая долговая нагрузка")
+	}
+	if app.DelayedPayments12m > 0 {
+		riskFactors = append(riskFactors, fmt.Sprintf("Просрочки за 12 месяцев: %d", app.DelayedPayments12m))
+	}
+	if currentDelinquency {
+		riskFactors = append(riskFactors, "Есть текущие просрочки")
 	}
 
 	if len(positiveFactors) == 0 {
@@ -961,16 +1147,17 @@ func (h *AdminHandler) GenerateAIRecommendation(c *gin.Context) {
 	}
 
 	// Add action to history
-	app.AddActionToHistory("ai_analysis", "ИИ-система", fmt.Sprintf("Проведён скоринговый анализ. Рекомендация: %s. Балл: %d", recommendation, score))
+	app.AddActionToHistory("recommendation_letter", "Система", fmt.Sprintf("Сформировано рекомендательное письмо. Решение: %s. Балл БКИ: %d", decisionText, score))
 	db.Save(&app)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "AI анализ завершён успешно",
+		"message":        "Рекомендательное письмо сформировано",
 		"recommendation": recommendation,
 		"comment":        comment,
 		"score":          score,
-		"risk_score":     score,
+		"risk_score":     app.RiskScore,
 		"credit_score":   app.CreditScore,
 		"factors":        string(factorsJSON),
+		"letter_ready":   true,
 	})
 }

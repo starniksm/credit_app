@@ -249,6 +249,9 @@ func (s *ApplicationService) UpdateApplication(id string, app *models.CreditAppl
 	if app.ReviewerID != "" {
 		existingApp.ReviewerID = app.ReviewerID
 	}
+	if app.AnalystName != "" {
+		existingApp.AnalystName = app.AnalystName
+	}
 	if app.ReviewStartedAt != nil {
 		existingApp.ReviewStartedAt = app.ReviewStartedAt
 	}

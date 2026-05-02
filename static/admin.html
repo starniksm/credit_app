@@ -37,7 +37,7 @@
         .status-badge.in_review { background: #ffc107; color: #212529; }
         .status-badge.approved { background: #28a745; color: white; }
         .status-badge.rejected { background: #dc3545; color: white; }
-        .action-btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 5px; }
+        .action-btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
         .action-btn.approve { background: #28a745; color: white; }
         .action-btn.reject { background: #dc3545; color: white; }
         .action-btn:hover { opacity: 0.9; }
@@ -45,6 +45,23 @@
         .action-btn.start { background: #6f42c1; color: white; }
         .action-btn.continue { background: #fd7e14; color: white; }
         .action-btn.create { background: #6f42c1; color: white; }
+        .actions-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 260px; }
+        .action-btn.icon-delete {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 50%;
+            background: #fff;
+            color: #dc3545;
+            border: 1px solid #f1b0b7;
+            font-size: 22px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+        }
+        .action-btn.icon-delete:hover { background: #dc3545; color: white; border-color: #dc3545; opacity: 1; }
         .error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; }
         .success { color: #155724; padding: 10px; background: #d4edda; border-radius: 5px; margin-bottom: 15px; }
         .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
@@ -380,6 +397,7 @@
         function showDashboard() {
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('dashboard-section').classList.remove('hidden');
+
         }
         
         function showApplicationsList() {
@@ -408,9 +426,14 @@
                 if (response.ok) {
                     token = data.token;
                     localStorage.setItem('adminToken', token);
-                    // Сохраняем имя пользователя
-                    if (data.user && data.user.username) {
-                        localStorage.setItem('username', data.user.username);
+                    // Сохраняем роль и ID пользователя
+                    if (data.user) {
+                        localStorage.setItem('selectedRole', data.user.role || 'analyst');
+                        localStorage.setItem('userData', JSON.stringify(data.user));
+                        localStorage.setItem('currentUserId', data.user.id || '');
+                        if (data.user.username) {
+                            localStorage.setItem('username', data.user.username);
+                        }
                     }
                     showDashboard();
                     loadDashboard();
@@ -590,25 +613,51 @@
         }
         
         function getActions(app) {
+            const deleteAction = getAdminDeleteAction(app.id);
+
             if (app.status === 'new') {
                 return `
+                    <div class="actions-cell">
                     <button class="action-btn start" onclick="startReview('${app.id}')">Начать проверку</button>
                     <a href="/application/${app.id}"><button class="action-btn view">Просмотр</button></a>
+                    ${deleteAction}
+                    </div>
                 `;
             } else if (app.status === 'in_review') {
                 return `
+                    <div class="actions-cell">
                     <a href="/application/${app.id}"><button class="action-btn continue">Продолжить</button></a>
                     <button class="action-btn approve" onclick="updateStatus('${app.id}', 'approved')">Одобрить</button>
                     <button class="action-btn reject" onclick="updateStatus('${app.id}', 'rejected')">Отклонить</button>
+                    ${deleteAction}
+                    </div>
                 `;
             } else if (app.status === 'approved') {
                 return `
+                    <div class="actions-cell">
                     <a href="/product-selection?application_id=${app.id}"><button class="action-btn start">Подбор продукта</button></a>
                     <a href="/application/${app.id}"><button class="action-btn view">Просмотр</button></a>
+                    ${deleteAction}
+                    </div>
                 `;
             } else {
-                return `<a href="/application/${app.id}"><button class="action-btn view">Просмотр</button></a>`;
+                return `
+                    <div class="actions-cell">
+                    <a href="/application/${app.id}"><button class="action-btn view">Просмотр</button></a>
+                    ${deleteAction}
+                    </div>
+                `;
             }
+        }
+
+        function isAdminUser() {
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            return userData.role === 'admin';
+        }
+
+        function getAdminDeleteAction(id) {
+            if (!isAdminUser()) return '';
+            return `<button class="action-btn icon-delete" onclick="deleteApplication('${id}')" title="Удалить заявку" aria-label="Удалить заявку">&times;</button>`;
         }
         
         async function startReview(id) {
@@ -642,6 +691,32 @@
                     loadDashboard();
                 } else {
                     showMessage('Ошибка обновления статуса', 'error');
+                }
+            } catch (err) {
+                showMessage('Ошибка соединения', 'error');
+            }
+        }
+
+        async function deleteApplication(id) {
+            if (!isAdminUser()) {
+                showMessage('Удалять заявки может только администратор', 'error');
+                return;
+            }
+
+            if (!confirm('Удалить заявку ' + id + '? Это действие нельзя отменить.')) return;
+
+            try {
+                const response = await fetch(`${API_URL}/api/applications/${encodeURIComponent(id)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    showMessage('Заявка удалена', 'success');
+                    loadDashboard();
+                } else {
+                    const result = await response.json().catch(() => ({}));
+                    showMessage(result.error || 'Ошибка удаления заявки', 'error');
                 }
             } catch (err) {
                 showMessage('Ошибка соединения', 'error');

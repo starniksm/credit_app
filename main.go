@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"credit_app/config"
 	"credit_app/database"
@@ -51,8 +52,13 @@ func main() {
 	// Setup routes
 	routes.SetupRoutes(r, db)
 
-	log.Println("Starting server on :8080")
-	if err := r.Run(":8080"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Println("Starting server on :" + port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatal("Server error:", err)
 	}
 }

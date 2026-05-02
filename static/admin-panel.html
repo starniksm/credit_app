@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель администратора - Управление пользователями</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .hidden { display: none !important; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 20px; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; }
+        .header-top h1 { font-size: 24px; }
+        .back-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+        .back-btn:hover { background: rgba(255,255,255,0.3); }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .logout-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
+        .logout-btn:hover { background: rgba(255,255,255,0.3); }
+
+        /* Layout */
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        /* Cards */
+        .card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .card-title { font-size: 18px; font-weight: 600; color: #333; }
+
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        .stat-card h3 { color: #666; font-size: 14px; margin-bottom: 10px; }
+        .stat-card .value { font-size: 32px; font-weight: bold; }
+        .stat-card.admin .value { color: #667eea; }
+        .stat-card.analyst .value { color: #28a745; }
+        .stat-card.representative .value { color: #17a2b8; }
+        .stat-card.total .value { color: #333; }
+
+        /* Table */
+        .users-table { width: 100%; border-collapse: collapse; }
+        .users-table th, .users-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .users-table th { background: #f8f9fa; font-weight: 600; color: #555; }
+        .users-table tr:hover { background: #f8f9fa; }
+
+        /* Role badges */
+        .role-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .role-badge.admin { background: #667eea; color: white; }
+        .role-badge.analyst { background: #28a745; color: white; }
+        .role-badge.representative { background: #17a2b8; color: white; }
+
+        /* Buttons */
+        .action-btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 13px; margin-right: 5px; }
+        .action-btn.edit { background: #ffc107; color: #212529; }
+        .action-btn.password { background: #667eea; color: white; }
+        .action-btn.role { background: #17a2b8; color: white; }
+        .action-btn.delete { background: #dc3545; color: white; }
+        .action-btn:hover { opacity: 0.9; }
+
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; }
+        .btn-primary:hover { opacity: 0.9; }
+
+        /* Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: white; border-radius: 10px; padding: 30px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .modal-header h2 { font-size: 20px; }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
+        .modal-close:hover { color: #333; }
+
+        /* Form */
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #666; font-size: 14px; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .table-wrap { overflow-x: auto; }
+
+        /* Login */
+        .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { background: white; border-radius: 10px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 30px; color: #333; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .login-btn:hover { opacity: 0.9; }
+        .error { color: #dc3545; padding: 10px; background: #f8d7da; border-radius: 5px; margin-bottom: 15px; }
+        .success { color: #155724; padding: 10px; background: #d4edda; border-radius: 5px; margin-bottom: 15px; }
+
+        /* No data */
+        .no-data { text-align: center; padding: 40px; color: #666; }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="login-section" class="login-container">
+        <div class="login-card">
+            <h1>Панель администратора</h1>
+            <div id="login-error" class="error hidden"></div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" id="login-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="login-password" placeholder="Введите пароль">
+            </div>
+            <button class="login-btn" onclick="login()">Войти</button>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="main-section" class="hidden">
+        <div class="header">
+            <div class="header-top">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <a href="/analyst" class="back-btn">← Назад</a>
+                    <h1>Панель администратора</h1>
+                </div>
+                <div class="user-info">
+                    <span id="user-greeting">Администратор</span>
+                    <button class="logout-btn" onclick="logout()">Выйти</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div id="message" class="hidden"></div>
+
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card total">
+                    <h3>Всего пользователей</h3>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card admin">
+                    <h3>Администраторы</h3>
+                    <div class="value" id="stat-admin">0</div>
+                </div>
+                <div class="stat-card analyst">
+                    <h3>Аналитики</h3>
+                    <div class="value" id="stat-analyst">0</div>
+                </div>
+                <div class="stat-card representative">
+                    <h3>Представители</h3>
+                    <div class="value" id="stat-representative">0</div>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Управление пользователями</div>
+                    <button class="btn-primary" onclick="showCreateModal()">+ Создать пользователя</button>
+                </div>
+                <div class="table-wrap">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Логин</th>
+                            <th>ФИО</th>
+                            <th>Email</th>
+                            <th>Роль</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table">
+                    </tbody>
+                </table>
+                </div>
+                <div id="no-users" class="no-data hidden">Нет пользователей</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="create-modal" class="modal-overlay hidden" onclick="closeCreateModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Создать пользователя</h2>
+                <button class="modal-close" onclick="closeCreateModal()">&times;</button>
+            </div>
+            <div id="create-error" class="error hidden"></div>
+            <div class="form-group">
+                <label>Логин *</label>
+                <input type="text" id="create-username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Email *</label>
+                <input type="email" id="create-email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label>Пароль * (мин. 6 символов)</label>
+                <input type="password" id="create-password" placeholder="Введите пароль">
+            </div>
+            <div class="form-group">
+                <label>Роль *</label>
+                <select id="create-role">
+                    <option value="analyst">Кредитный аналитик</option>
+                    <option value="representative">Представитель банка</option>
+                    <option value="admin">Администратор</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>ФИО</label>
+                <input type="text" id="create-fullname" placeholder="Иванов Иван Иванович">
+            </div>
+            <div class="form-group">
+                <label>Телефон</label>
+                <input type="text" id="create-phone" placeholder="+7 (999) 123-45-67">
+            </div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeCreateModal()" style="background: #f8f9fa; color: #333;">Отмена</button>
+                <button class="btn-primary" onclick="createUser()">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="edit-modal" class="modal-overlay hidden" onclick="closeEditModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Редактировать пользователя</h2>
+                <button class="modal-close" onclick="closeEditModal()">&times;</button>
+            </div>
+            <div id="edit-error" class="error hidden"></div>
+            <input type="hidden" id="edit-user-id">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="edit-email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label>ФИО</label>
+                <input type="text" id="edit-fullname" placeholder="Иванов Иван Иванович">
+            </div>
+            <div class="form-group">
+                <label>Телефон</label>
+                <input type="text" id="edit-phone" placeholder="+7 (999) 123-45-67">
+            </div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeEditModal()" style="background: #f8f9fa; color: #333;">Отмена</button>
+                <button class="btn-primary" onclick="updateUser()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="password-modal" class="modal-overlay hidden" onclick="closePasswordModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Сменить пароль</h2>
+                <button class="modal-close" onclick="closePasswordModal()">&times;</button>
+            </div>
+            <div id="password-error" class="error hidden"></div>
+            <input type="hidden" id="password-user-id">
+            <div class="form-group">
+                <label>Новый пароль * (мин. 6 символов)</label>
+                <input type="password" id="new-password" placeholder="Введите новый пароль">
+            </div>
+            <div class="form-group">
+                <label>Подтвердите пароль *</label>
+                <input type="password" id="confirm-password" placeholder="Подтвердите пароль">
+            </div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closePasswordModal()" style="background: #f8f9fa; color: #333;">Отмена</button>
+                <button class="btn-primary" onclick="changePassword()">Сменить пароль</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Role Modal -->
+    <div id="role-modal" class="modal-overlay hidden" onclick="closeRoleModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Изменить роль</h2>
+                <button class="modal-close" onclick="closeRoleModal()">&times;</button>
+            </div>
+            <div id="role-error" class="error hidden"></div>
+            <input type="hidden" id="role-user-id">
+            <div class="form-group">
+                <label>Новая роль *</label>
+                <select id="new-role">
+                    <option value="analyst">Кредитный аналитик</option>
+                    <option value="representative">Представитель банка</option>
+                    <option value="admin">Администратор</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeRoleModal()" style="background: #f8f9fa; color: #333;">Отмена</button>
+                <button class="btn-primary" onclick="changeRole()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let token = null;
+        let currentUserId = null;
+        let users = [];
+
+        function checkAuth() {
+            token = localStorage.getItem('adminToken');
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const role = userData.role || localStorage.getItem('selectedRole');
+            if (token && role === 'admin') {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('main-section').classList.remove('hidden');
+                document.getElementById('user-greeting').textContent = userData.fullName || userData.username || 'Администратор';
+                loadUsers();
+            } else {
+                document.getElementById('login-section').classList.remove('hidden');
+                document.getElementById('main-section').classList.add('hidden');
+            }
+        }
+
+        function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            fetch(API_URL + '/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.token) {
+                    if (!data.user || data.user.role !== 'admin') {
+                        document.getElementById('login-error').textContent = 'Доступ запрещён: требуются права администратора';
+                        document.getElementById('login-error').classList.remove('hidden');
+                        return;
+                    }
+                    localStorage.setItem('adminToken', data.token);
+                    localStorage.setItem('selectedRole', 'admin');
+                    localStorage.setItem('userData', JSON.stringify(data.user));
+                    localStorage.setItem('currentUserId', data.user?.id || '');
+                    token = data.token;
+                    checkAuth();
+                } else {
+                    document.getElementById('login-error').textContent = data.error || 'Ошибка авторизации';
+                    document.getElementById('login-error').classList.remove('hidden');
+                }
+            })
+            .catch(err => {
+                document.getElementById('login-error').textContent = 'Ошибка подключения к серверу';
+                document.getElementById('login-error').classList.remove('hidden');
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('selectedRole');
+            localStorage.removeItem('userData');
+            localStorage.removeItem('currentUserId');
+            token = null;
+            window.location.href = '/';
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin-panel/users`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                users = await response.json();
+                renderUsers();
+                updateStats();
+            } catch (err) {
+                console.error('Error loading users:', err);
+            }
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById('users-table');
+            const noUsers = document.getElementById('no-users');
+
+            if (users.length === 0) {
+                tbody.innerHTML = '';
+                noUsers.classList.remove('hidden');
+                return;
+            }
+
+            noUsers.classList.add('hidden');
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.full_name || '—'}</td>
+                    <td>${user.email}</td>
+                    <td><span class="role-badge ${user.role}">${getRoleText(user.role)}</span></td>
+                    <td>
+                        <button class="action-btn password" onclick="showPasswordModal(${user.id})">🔑 Пароль</button>
+                        <button class="action-btn edit" onclick="showEditModal(${user.id})">✏ Данные</button>
+                        <button class="action-btn role" onclick="showRoleModal(${user.id}, '${user.role}')">👤 Роль</button>
+                        ${user.id !== parseInt(localStorage.getItem('currentUserId') || '0') ? `<button class="action-btn delete" onclick="deleteUser(${user.id})">🗑 Удалить</button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('stat-total').textContent = users.length;
+            document.getElementById('stat-admin').textContent = users.filter(u => u.role === 'admin').length;
+            document.getElementById('stat-analyst').textContent = users.filter(u => u.role === 'analyst').length;
+            document.getElementById('stat-representative').textContent = users.filter(u => u.role === 'representative').length;
+        }
+
+        function getRoleText(role) {
+            const roles = { admin: 'Администратор', analyst: 'Аналитик', representative: 'Представитель' };
+            return roles[role] || role;
+        }
+
+        // Edit User
+        function showEditModal(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) return;
+
+            currentUserId = userId;
+            document.getElementById('edit-modal').classList.remove('hidden');
+            document.getElementById('edit-error').classList.add('hidden');
+            document.getElementById('edit-user-id').value = userId;
+            document.getElementById('edit-email').value = user.email || '';
+            document.getElementById('edit-fullname').value = user.full_name || '';
+            document.getElementById('edit-phone').value = user.phone || '';
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+        }
+
+        async function updateUser() {
+            const data = {
+                email: document.getElementById('edit-email').value,
+                full_name: document.getElementById('edit-fullname').value,
+                phone: document.getElementById('edit-phone').value
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin-panel/users/${currentUserId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    closeEditModal();
+                    loadUsers();
+                    showMessage('Данные пользователя обновлены', 'success');
+                } else {
+                    document.getElementById('edit-error').textContent = result.error;
+                    document.getElementById('edit-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('edit-error').textContent = 'Ошибка подключения';
+                document.getElementById('edit-error').classList.remove('hidden');
+            }
+        }
+
+        // Create User
+        function showCreateModal() {
+            document.getElementById('create-modal').classList.remove('hidden');
+            document.getElementById('create-error').classList.add('hidden');
+            document.getElementById('create-username').value = '';
+            document.getElementById('create-email').value = '';
+            document.getElementById('create-password').value = '';
+            document.getElementById('create-fullname').value = '';
+            document.getElementById('create-phone').value = '';
+        }
+
+        function closeCreateModal() {
+            document.getElementById('create-modal').classList.add('hidden');
+        }
+
+        async function createUser() {
+            const data = {
+                username: document.getElementById('create-username').value,
+                email: document.getElementById('create-email').value,
+                password: document.getElementById('create-password').value,
+                role: document.getElementById('create-role').value,
+                full_name: document.getElementById('create-fullname').value,
+                phone: document.getElementById('create-phone').value
+            };
+
+            if (!data.username || !data.email || !data.password) {
+                document.getElementById('create-error').textContent = 'Заполните обязательные поля';
+                document.getElementById('create-error').classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin-panel/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    closeCreateModal();
+                    loadUsers();
+                    showMessage('Пользователь успешно создан', 'success');
+                } else {
+                    document.getElementById('create-error').textContent = result.error;
+                    document.getElementById('create-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('create-error').textContent = 'Ошибка подключения';
+                document.getElementById('create-error').classList.remove('hidden');
+            }
+        }
+
+        // Change Password
+        function showPasswordModal(userId) {
+            currentUserId = userId;
+            document.getElementById('password-modal').classList.remove('hidden');
+            document.getElementById('password-error').classList.add('hidden');
+            document.getElementById('password-user-id').value = userId;
+            document.getElementById('new-password').value = '';
+            document.getElementById('confirm-password').value = '';
+        }
+
+        function closePasswordModal() {
+            document.getElementById('password-modal').classList.add('hidden');
+        }
+
+        async function changePassword() {
+            const newPass = document.getElementById('new-password').value;
+            const confirmPass = document.getElementById('confirm-password').value;
+
+            if (!newPass || newPass.length < 6) {
+                document.getElementById('password-error').textContent = 'Пароль должен быть не менее 6 символов';
+                document.getElementById('password-error').classList.remove('hidden');
+                return;
+            }
+            if (newPass !== confirmPass) {
+                document.getElementById('password-error').textContent = 'Пароли не совпадают';
+                document.getElementById('password-error').classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin-panel/users/${currentUserId}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ new_password: newPass })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    closePasswordModal();
+                    showMessage('Пароль успешно изменён', 'success');
+                } else {
+                    document.getElementById('password-error').textContent = result.error;
+                    document.getElementById('password-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('password-error').textContent = 'Ошибка подключения';
+                document.getElementById('password-error').classList.remove('hidden');
+            }
+        }
+
+        // Change Role
+        function showRoleModal(userId, currentRole) {
+            currentUserId = userId;
+            document.getElementById('role-modal').classList.remove('hidden');
+            document.getElementById('role-error').classList.add('hidden');
+            document.getElementById('role-user-id').value = userId;
+            document.getElementById('new-role').value = currentRole;
+        }
+
+        function closeRoleModal() {
+            document.getElementById('role-modal').classList.add('hidden');
+        }
+
+        async function changeRole() {
+            const newRole = document.getElementById('new-role').value;
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin-panel/users/${currentUserId}/role`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ role: newRole })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    closeRoleModal();
+                    loadUsers();
+                    showMessage('Роль пользователя обновлена', 'success');
+                } else {
+                    document.getElementById('role-error').textContent = result.error;
+                    document.getElementById('role-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('role-error').textContent = 'Ошибка подключения';
+                document.getElementById('role-error').classList.remove('hidden');
+            }
+        }
+
+        // Delete User
+        async function deleteUser(userId) {
+            if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin-panel/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    loadUsers();
+                    showMessage('Пользователь удалён', 'success');
+                } else {
+                    const result = await response.json();
+                    alert(result.error || 'Ошибка удаления');
+                }
+            } catch (err) {
+                alert('Ошибка подключения');
+            }
+        }
+
+        // Message
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = type;
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
+        // Initialize
+        window.onload = function() {
+            checkAuth();
+        };
+    </script>
+</body>
+</html>

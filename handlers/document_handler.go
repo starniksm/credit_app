@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -47,18 +48,54 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	repayDateStr := repayDate.Format("02.01.2006")
 	transferDateStr := transferDate.Format("02.01.2006")
 
-	wd, _ := os.Getwd()
-	fontDir := filepath.Join(wd, "fonts")
+	// Get font directory
+	fontDir := getFontDir()
 
+	// Debug logging
+	fmt.Printf("[PDF DEBUG] Font directory: %s\n", fontDir)
+	wd, _ := os.Getwd()
+	fmt.Printf("[PDF DEBUG] CWD: %s\n", wd)
+
+	// Verify font files exist
+	ttfPath := filepath.Join(fontDir, "DejaVuSans.ttf")
+	ttfBoldPath := filepath.Join(fontDir, "DejaVuSans-Bold.ttf")
+
+	fmt.Printf("[PDF DEBUG] Checking TTF: %s\n", ttfPath)
+	if _, err := os.Stat(ttfPath); os.IsNotExist(err) {
+		// Try to list what's in the font directory for debugging
+		if entries, err := os.ReadDir(fontDir); err == nil {
+			fmt.Printf("[PDF DEBUG] Contents of font dir:\n")
+			for _, e := range entries {
+				fmt.Printf("[PDF DEBUG]   %s\n", e.Name())
+			}
+		} else {
+			fmt.Printf("[PDF DEBUG] Cannot read font dir: %v\n", err)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Файл шрифта не найден. Ожидаемый путь: %s", ttfPath)})
+		return
+	}
+	if _, err := os.Stat(ttfBoldPath); os.IsNotExist(err) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Файл шрифта Bold не найден. Ожидаемый путь: %s", ttfBoldPath)})
+		return
+	}
+
+	// Create PDF with font directory set
 	pdf := gofpdf.New("P", "mm", "A4", fontDir)
 	pdf.SetMargins(20, 15, 20)
 	pdf.AddPage()
 
-	// Load UTF-8 Cyrillic font (DejaVu Sans)
-	hasCyrillic := addCyrillicFont(pdf)
+	// Load UTF-8 Cyrillic font - use just filename since fontDir is set in New()
+	pdf.AddUTF8Font("dejavu", "", "DejaVuSans.ttf")
+	pdf.AddUTF8Font("dejavu", "B", "DejaVuSans-Bold.ttf")
+
+	// Check for font loading errors
+	if err := pdf.Error(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка загрузки шрифта: " + err.Error()})
+		return
+	}
 
 	// Build PDF content with proper Russian text
-	h.buildContractPDF(pdf, app, contractNumber, contractDate, loanAmount, loanTerm, interestRate, repayDateStr, transferDateStr, hasCyrillic)
+	h.buildContractPDF(pdf, app, contractNumber, contractDate, loanAmount, loanTerm, interestRate, repayDateStr, transferDateStr)
 
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=contract_%s.pdf", appID))
@@ -67,15 +104,9 @@ func (h *DocumentHandler) GenerateContractPDF(c *gin.Context) {
 	pdf.Output(c.Writer)
 }
 
-func (h *DocumentHandler) buildContractPDF(pdf *gofpdf.Fpdf, app models.CreditApplication, contractNumber, contractDate, loanAmount, loanTerm, interestRate, repayDateStr, transferDateStr string, hasCyrillic bool) {
-	// Use DejaVu Sans for Cyrillic, Arial as fallback
-	fontName := "Arial"
-	if hasCyrillic {
-		fontName = "dejavu"
-	}
-
+func (h *DocumentHandler) buildContractPDF(pdf *gofpdf.Fpdf, app models.CreditApplication, contractNumber, contractDate, loanAmount, loanTerm, interestRate, repayDateStr, transferDateStr string) {
 	setFont := func(style string, size float64) {
-		pdf.SetFont(fontName, style, size)
+		pdf.SetFont("dejavu", style, size)
 	}
 
 	// Title
@@ -116,7 +147,7 @@ func (h *DocumentHandler) buildContractPDF(pdf *gofpdf.Fpdf, app models.CreditAp
 	setFont("", 11)
 	amountFormatted := formatAmountClean(loanAmount)
 
-	pdf.MultiCell(0, 5, fmt.Sprintf("1.1. Кредитор до %s передает Заемщику %s ₽ (далее — Кредит), а Заемщик обязуется вернуть Кредитору Кредит и уплатить проценты по нему в порядке, установленном Договором, и в сроки, установленные Договором.", transferDateStr, amountFormatted), "", "J", false)
+	pdf.MultiCell(0, 5, fmt.Sprintf("1.1. Кредитор до %s передает Заемщику %s руб. (далее — Кредит), а Заемщик обязуется вернуть Кредитору Кредит и уплатить проценты по нему в порядке, установленном Договором, и в сроки, установленные Договором.", transferDateStr, amountFormatted), "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, fmt.Sprintf("1.2. Заемщик выплачивает Кредитору проценты за пользование Кредитом — %s%% годовых.", interestRate), "", "J", false)
 	pdf.Ln(2)
@@ -146,7 +177,7 @@ func (h *DocumentHandler) buildContractPDF(pdf *gofpdf.Fpdf, app models.CreditAp
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, fmt.Sprintf("3.2. Заемщик ежемесячно не позднее 10-го числа каждого месяца перечисляет Кредитору платеж по Кредиту в суммах, указанных в приложении № 1 к Договору. Срок кредитования составляет %s месяцев.", loanTerm), "", "J", false)
 	pdf.Ln(2)
-	pdf.MultiCell(0, 5, "3.3. Кредит может быть возвращен досрочно полностью или по частям. Заемщик письменно уведомляет Кредитора минимум за 10 дней о досрочном погашении Кредита и выплачивает не менее 20% от оставшейся суммы Кредита.", "", "J", false)
+	pdf.MultiCell(0, 5, "3.3. Кредит может быть возвращен досрочно полностью или по частям. Заемщик письменно уведомляет Кредитора минимум за 10 дней о досрочном погашении Кредита и выплачивает не менее 20%% от оставшейся суммы Кредита.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "3.4. При безналичном переводе Заемщик указывает в назначении платежа дату и номер Договора. В этом случае Кредит считается возвращенным в день зачисления денег на расчетный счет Кредитора.", "", "J", false)
 	pdf.Ln(3)
@@ -159,7 +190,7 @@ func (h *DocumentHandler) buildContractPDF(pdf *gofpdf.Fpdf, app models.CreditAp
 	setFont("", 11)
 	pdf.MultiCell(0, 5, "4.1. За неисполнение или ненадлежащее исполнение обязательств по настоящему Договору Стороны несут ответственность в соответствии с действующим законодательством Российской Федерации.", "", "J", false)
 	pdf.Ln(2)
-	pdf.MultiCell(0, 5, "4.2. В случае просрочки исполнения Заемщиком обязательств по возврату Кредита и/или уплате процентов, Кредитор вправе потребовать уплаты неустойки (пени) в размере 0,1% от суммы просроченного платежа за каждый день просрочки.", "", "J", false)
+	pdf.MultiCell(0, 5, "4.2. В случае просрочки исполнения Заемщиком обязательств по возврату Кредита и/или уплате процентов, Кредитор вправе потребовать уплаты неустойки (пени) в размере 0,1%% от суммы просроченного платежа за каждый день просрочки.", "", "J", false)
 	pdf.Ln(2)
 	pdf.MultiCell(0, 5, "4.3. Кредитор не несет ответственности за убытки, понесенные Заемщиком в связи с неисполнением последним своих обязательств по Договору.", "", "J", false)
 	pdf.Ln(3)
@@ -313,15 +344,50 @@ func (h *DocumentHandler) GeneratePaymentSchedulePDF(c *gin.Context) {
 	monthlyRate := interestRate / 100 / 12
 	monthlyPayment := loanAmount * (monthlyRate * math.Pow(1+monthlyRate, float64(loanTerm))) / (math.Pow(1+monthlyRate, float64(loanTerm)) - 1)
 
+	// Get font directory
+	fontDir := getFontDir()
+
+	// Debug logging
+	fmt.Printf("[PDF DEBUG] Font directory: %s\n", fontDir)
 	wd, _ := os.Getwd()
-	fontDir := filepath.Join(wd, "fonts")
+	fmt.Printf("[PDF DEBUG] CWD: %s\n", wd)
+
+	// Verify font files exist
+	ttfPath := filepath.Join(fontDir, "DejaVuSans.ttf")
+	ttfBoldPath := filepath.Join(fontDir, "DejaVuSans-Bold.ttf")
+
+	fmt.Printf("[PDF DEBUG] Checking TTF: %s\n", ttfPath)
+	if _, err := os.Stat(ttfPath); os.IsNotExist(err) {
+		// Try to list what's in the font directory for debugging
+		if entries, err := os.ReadDir(fontDir); err == nil {
+			fmt.Printf("[PDF DEBUG] Contents of font dir:\n")
+			for _, e := range entries {
+				fmt.Printf("[PDF DEBUG]   %s\n", e.Name())
+			}
+		} else {
+			fmt.Printf("[PDF DEBUG] Cannot read font dir: %v\n", err)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Файл шрифта не найден. Ожидаемый путь: %s", ttfPath)})
+		return
+	}
+	if _, err := os.Stat(ttfBoldPath); os.IsNotExist(err) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл шрифта DejaVuSans-Bold.ttf не найден"})
+		return
+	}
+
 	pdf := gofpdf.New("P", "mm", "A4", fontDir)
-	hasCyrillic := addCyrillicFont(pdf)
+	pdf.AddUTF8Font("dejavu", "", "DejaVuSans.ttf")
+	pdf.AddUTF8Font("dejavu", "B", "DejaVuSans-Bold.ttf")
+
+	if err := pdf.Error(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка загрузки шрифта: " + err.Error()})
+		return
+	}
 
 	pdf.SetMargins(15, 15, 15)
 	pdf.AddPage()
 
-	h.buildSchedulePDF(pdf, app, appID, loanAmountStr, loanTerm, interestRateStr, loanAmount, monthlyPayment, monthlyRate, hasCyrillic)
+	h.buildSchedulePDF(pdf, app, appID, loanAmountStr, loanTerm, interestRateStr, loanAmount, monthlyPayment, monthlyRate)
 
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=schedule_%s.pdf", appID))
@@ -330,14 +396,9 @@ func (h *DocumentHandler) GeneratePaymentSchedulePDF(c *gin.Context) {
 	pdf.Output(c.Writer)
 }
 
-func (h *DocumentHandler) buildSchedulePDF(pdf *gofpdf.Fpdf, app models.CreditApplication, appID, loanAmountStr string, loanTerm int, interestRateStr string, loanAmount, monthlyPayment, monthlyRate float64, hasCyrillic bool) {
-	fontName := "Arial"
-	if hasCyrillic {
-		fontName = "dejavu"
-	}
-
+func (h *DocumentHandler) buildSchedulePDF(pdf *gofpdf.Fpdf, app models.CreditApplication, appID, loanAmountStr string, loanTerm int, interestRateStr string, loanAmount, monthlyPayment, monthlyRate float64) {
 	setFont := func(style string, size float64) {
-		pdf.SetFont(fontName, style, size)
+		pdf.SetFont("dejavu", style, size)
 	}
 
 	setFont("B", 14)
@@ -455,7 +516,52 @@ func (h *DocumentHandler) SendDocumentsToClient(c *gin.Context) {
 	})
 }
 
-// Helper functions
+// getFontDir returns the absolute path to the fonts directory
+func getFontDir() string {
+	// Method 1: Use runtime.Caller to find fonts relative to this source file
+	_, filename, _, ok := runtime.Caller(0)
+	if ok {
+		// This file is in handlers/document_handler.go
+		// fonts/ is in the project root, so go up one level from handlers/
+		sourceDir := filepath.Dir(filename)
+		projectRoot := filepath.Dir(sourceDir)
+		fontDir := filepath.Join(projectRoot, "fonts")
+		if _, err := os.Stat(filepath.Join(fontDir, "DejaVuSans.ttf")); err == nil {
+			return fontDir
+		}
+	}
+
+	// Method 2: Check relative to executable
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		fontDir := filepath.Join(execDir, "fonts")
+		if _, err := os.Stat(filepath.Join(fontDir, "DejaVuSans.ttf")); err == nil {
+			return fontDir
+		}
+		parentDir := filepath.Dir(execDir)
+		fontDir = filepath.Join(parentDir, "fonts")
+		if _, err := os.Stat(filepath.Join(fontDir, "DejaVuSans.ttf")); err == nil {
+			return fontDir
+		}
+	}
+
+	// Method 3: Check relative to current working directory
+	wd, _ := os.Getwd()
+	fontDir := filepath.Join(wd, "fonts")
+	if _, err := os.Stat(filepath.Join(fontDir, "DejaVuSans.ttf")); err == nil {
+		return fontDir
+	}
+
+	parentDir := filepath.Dir(wd)
+	fontDir = filepath.Join(parentDir, "fonts")
+	if _, err := os.Stat(filepath.Join(fontDir, "DejaVuSans.ttf")); err == nil {
+		return fontDir
+	}
+
+	// Fallback
+	return filepath.Join(wd, "fonts")
+}
 func formatAmountClean(amountStr string) string {
 	amount := parseFloat(amountStr)
 	parts := strings.Split(fmt.Sprintf("%.2f", amount), ".")
@@ -482,33 +588,4 @@ func parseFloat(s string) float64 {
 func parseInt(s string) int {
 	val, _ := strconv.Atoi(s)
 	return val
-}
-
-// addCyrillicFont loads DejaVu Sans UTF-8 font for proper Cyrillic rendering
-func addCyrillicFont(pdf *gofpdf.Fpdf) (success bool) {
-	success = false
-	defer func() {
-		if r := recover(); r != nil {
-			success = false
-		}
-	}()
-
-	wd, _ := os.Getwd()
-	fontPath := filepath.Join(wd, "fonts", "DejaVuSans.ttf")
-	fontBoldPath := filepath.Join(wd, "fonts", "DejaVuSans-Bold.ttf")
-
-	// Check if font files exist
-	if _, err := os.Stat(fontPath); err != nil {
-		return false
-	}
-
-	// Add UTF-8 font with Cyrillic support
-	pdf.AddUTF8Font("dejavu", "", fontPath)
-	pdf.AddUTF8Font("dejavu", "B", fontBoldPath)
-
-	// Test if font was loaded successfully
-	pdf.SetFont("dejavu", "", 10)
-
-	success = true
-	return
 }

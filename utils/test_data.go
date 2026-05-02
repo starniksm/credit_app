@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -540,7 +542,7 @@ func CreateTestData(db *gorm.DB) {
 			DTIRatio:               0.10,
 			AvailableCreditLimit:   180000,
 			ActiveCreditsList:      "[]",
-			ApprovedAmount:         350000,
+			ApprovedAmount:         150000,
 			InitialScore:           710,
 			CreditHistoryScore:     65,
 			IncomeStabilityScore:   70,
@@ -1034,7 +1036,10 @@ func CreateTestData(db *gorm.DB) {
 		},
 	}
 
-	for _, app := range testApplications {
+	for i := range testApplications {
+		normalizeTestBKIData(&testApplications[i], i)
+		normalizeTestOperationalData(&testApplications[i], i)
+		app := testApplications[i]
 		var existingApp models.CreditApplication
 		result := db.Where("id = ?", app.ID).First(&existingApp)
 
@@ -1057,6 +1062,42 @@ func CreateTestData(db *gorm.DB) {
 			} else {
 				log.Printf("Created test application: %s", app.ID)
 			}
+		} else {
+			updates := map[string]interface{}{
+				"credit_score":           app.CreditScore,
+				"total_credits":          app.TotalCredits,
+				"active_credits":         app.ActiveCredits,
+				"closed_credits":         app.ClosedCredits,
+				"delayed_payments12m":    app.DelayedPayments12m,
+				"current_delinquencies":  app.CurrentDelinquencies,
+				"max_delinquency_days":   app.MaxDelinquencyDays,
+				"total_debt":             app.TotalDebt,
+				"dti_ratio":              app.DTIRatio,
+				"available_credit_limit": app.AvailableCreditLimit,
+				"active_credits_list":    app.ActiveCreditsList,
+				"debt_burden_ratio":      app.DebtBurdenRatio,
+				"delinquency_history":    app.DelinquencyHistory,
+				"debt_burden_details":    app.DebtBurdenDetails,
+			}
+			if existingApp.Status == "approved" {
+				approvedAmount := existingApp.ApprovedAmount
+				if approvedAmount <= 0 || approvedAmount > existingApp.RequestedAmount {
+					approvedAmount = existingApp.RequestedAmount
+				}
+				if app.ApprovedAmount > 0 && app.ApprovedAmount <= existingApp.RequestedAmount {
+					approvedAmount = app.ApprovedAmount
+				}
+				updates["approved_amount"] = approvedAmount
+			}
+			if existingApp.ReviewStartedAt == nil && app.ReviewStartedAt != nil {
+				updates["review_started_at"] = app.ReviewStartedAt
+			}
+			if existingApp.ReviewCompletedAt == nil && app.ReviewCompletedAt != nil {
+				updates["review_completed_at"] = app.ReviewCompletedAt
+			}
+			if err := db.Model(&existingApp).Updates(updates).Error; err != nil {
+				log.Printf("Error updating BKI test data for %s: %v", app.ID, err)
+			}
 		}
 	}
 
@@ -1065,4 +1106,306 @@ func CreateTestData(db *gorm.DB) {
 
 func ptrTime(t time.Time) *time.Time {
 	return &t
+}
+
+func normalizeTestBKIData(app *models.CreditApplication, seed int) {
+	type activeCredit struct {
+		Bank           string                   `json:"bank"`
+		Type           string                   `json:"type"`
+		Debt           float64                  `json:"debt"`
+		MonthlyPayment float64                  `json:"monthly_payment"`
+		PaymentStatus  string                   `json:"payment_status"`
+		DaysOverdue    int                      `json:"days_overdue"`
+		PaymentDay     int                      `json:"payment_day"`
+		NextPayment    string                   `json:"next_payment_date"`
+		PaymentHistory []map[string]interface{} `json:"payment_history"`
+	}
+
+	var rawCredits []map[string]interface{}
+	if app.ActiveCreditsList != "" {
+		if err := json.Unmarshal([]byte(app.ActiveCreditsList), &rawCredits); err != nil {
+			rawCredits = nil
+		}
+	}
+
+	banks := []string{"Сбербанк", "ВТБ", "Газпромбанк", "Альфа-Банк", "Т-Банк", "Росбанк", "Совкомбанк"}
+	credits := make([]activeCredit, 0, len(rawCredits))
+	knownMonthlyPayments := 0.0
+	missingMonthlyPayments := 0
+	targetMonthlyPayments := app.DTIRatio * app.MonthlyIncome
+	for _, raw := range rawCredits {
+		monthlyPayment := numberFromMap(raw, "monthly_payment", "monthlyPayment")
+		if monthlyPayment > 0 {
+			knownMonthlyPayments += monthlyPayment
+		} else {
+			missingMonthlyPayments++
+		}
+	}
+
+	for i, raw := range rawCredits {
+		debt := numberFromMap(raw, "debt", "amount")
+		monthlyPayment := numberFromMap(raw, "monthly_payment", "monthlyPayment")
+		if monthlyPayment == 0 && debt > 0 {
+			remainingTarget := targetMonthlyPayments - knownMonthlyPayments
+			if remainingTarget > 0 && missingMonthlyPayments > 0 {
+				monthlyPayment = remainingTarget / float64(missingMonthlyPayments)
+			} else {
+				monthlyPayment = estimateMonthlyPayment(rawString(raw, "type"), debt)
+			}
+		}
+
+		daysOverdue := int(numberFromMap(raw, "days_overdue", "daysOverdue"))
+		status := rawString(raw, "payment_status", "paymentStatus")
+		if status == "" {
+			status = "ok"
+		}
+		if daysOverdue > 0 && status == "ok" {
+			status = "delayed"
+		}
+		if daysOverdue > 90 {
+			status = "critical"
+		}
+
+		creditType := rawString(raw, "type")
+		if creditType == "" {
+			creditType = "Потребительский кредит"
+		}
+
+		bank := rawString(raw, "bank")
+		if bank == "" {
+			bank = banks[(seed+i)%len(banks)]
+		}
+		paymentDay := int(numberFromMap(raw, "payment_day", "paymentDay"))
+		if paymentDay == 0 {
+			paymentDay = 5 + ((seed + i*3) % 20)
+		}
+		nextPayment := nextPaymentDate(paymentDay)
+
+		credits = append(credits, activeCredit{
+			Bank:           bank,
+			Type:           creditType,
+			Debt:           debt,
+			MonthlyPayment: monthlyPayment,
+			PaymentStatus:  status,
+			DaysOverdue:    daysOverdue,
+			PaymentDay:     paymentDay,
+			NextPayment:    nextPayment.Format("2006-01-02"),
+			PaymentHistory: buildPaymentHistory(paymentDay, monthlyPayment, daysOverdue, status, seed+i),
+		})
+	}
+
+	app.ActiveCredits = len(credits)
+	if app.TotalCredits < app.ActiveCredits {
+		app.TotalCredits = app.ActiveCredits
+	}
+	app.ClosedCredits = app.TotalCredits - app.ActiveCredits
+	if app.ClosedCredits < 0 {
+		app.ClosedCredits = 0
+	}
+
+	totalDebt := 0.0
+	totalMonthlyPayments := 0.0
+	currentDelinquencies := false
+	maxDelinquencyDays := app.MaxDelinquencyDays
+	for _, credit := range credits {
+		totalDebt += credit.Debt
+		totalMonthlyPayments += credit.MonthlyPayment
+		if credit.PaymentStatus == "delayed" || credit.PaymentStatus == "critical" || credit.DaysOverdue > 0 {
+			currentDelinquencies = true
+		}
+		if credit.DaysOverdue > maxDelinquencyDays {
+			maxDelinquencyDays = credit.DaysOverdue
+		}
+	}
+
+	app.TotalDebt = totalDebt
+	app.CurrentDelinquencies = currentDelinquencies || app.CurrentDelinquencies
+	app.MaxDelinquencyDays = maxDelinquencyDays
+	if app.DelayedPayments12m > 0 && app.MaxDelinquencyDays == 0 {
+		app.MaxDelinquencyDays = 15
+	}
+
+	if app.MonthlyIncome > 0 {
+		app.DTIRatio = totalMonthlyPayments / app.MonthlyIncome
+		app.DebtBurdenRatio = app.DTIRatio
+	} else {
+		app.DTIRatio = 0
+		app.DebtBurdenRatio = 0
+	}
+
+	creditsJSON, _ := json.Marshal(credits)
+	app.ActiveCreditsList = string(creditsJSON)
+
+	app.DebtBurdenDetails = mustJSON(map[string]interface{}{
+		"total_monthly_payments": totalMonthlyPayments,
+		"income_percentage":      app.DTIRatio * 100,
+		"recommended_max":        app.MonthlyIncome * 0.4,
+	})
+
+	app.DelinquencyHistory = buildDelinquencyHistory(app.DelayedPayments12m, app.MaxDelinquencyDays, app.CurrentDelinquencies)
+
+	if app.AvailableCreditLimit == 0 && !app.CurrentDelinquencies && app.CreditScore >= 600 {
+		app.AvailableCreditLimit = app.MonthlyIncome * 3
+	}
+}
+
+func normalizeTestOperationalData(app *models.CreditApplication, seed int) {
+	if app.Status == "approved" {
+		if app.ApprovedAmount <= 0 || app.ApprovedAmount > app.RequestedAmount {
+			app.ApprovedAmount = app.RequestedAmount
+		}
+	} else {
+		app.ApprovedAmount = 0
+	}
+
+	startedAt := app.CreatedAt.Add(time.Duration(20+seed*4) * time.Minute)
+	switch app.Status {
+	case "approved", "rejected":
+		completedAt := startedAt.Add(time.Duration(12+(seed%6)*5) * time.Minute)
+		app.ReviewStartedAt = &startedAt
+		app.ReviewCompletedAt = &completedAt
+	case "in_review", "manual_review":
+		app.ReviewStartedAt = &startedAt
+	}
+}
+
+func estimateMonthlyPayment(creditType string, debt float64) float64 {
+	switch creditType {
+	case "Кредитная карта", "Овердрафт":
+		return debt * 0.05
+	case "Ипотека":
+		return debt * 0.025
+	case "Автокредит":
+		return debt * 0.035
+	default:
+		return debt * 0.04
+	}
+}
+
+func nextPaymentDate(paymentDay int) time.Time {
+	now := time.Now()
+	year, month := now.Year(), now.Month()
+	lastDay := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+	if paymentDay > lastDay {
+		paymentDay = lastDay
+	}
+
+	next := time.Date(year, month, paymentDay, 0, 0, 0, 0, time.Local)
+	if !next.After(now) {
+		year, month = now.AddDate(0, 1, 0).Year(), now.AddDate(0, 1, 0).Month()
+		lastDay = time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+		if paymentDay > lastDay {
+			paymentDay = lastDay
+		}
+		next = time.Date(year, month, paymentDay, 0, 0, 0, 0, time.Local)
+	}
+
+	return next
+}
+
+func buildPaymentHistory(paymentDay int, monthlyPayment float64, daysOverdue int, status string, seed int) []map[string]interface{} {
+	items := make([]map[string]interface{}, 0, 6)
+	now := time.Now()
+	baseDueDate := time.Date(now.Year(), now.Month(), paymentDay, 0, 0, 0, 0, time.Local)
+	if baseDueDate.After(now) {
+		baseDueDate = baseDueDate.AddDate(0, -1, 0)
+	}
+
+	for i := 0; i < 6; i++ {
+		dueDate := baseDueDate.AddDate(0, -i, 0)
+		paymentDate := dueDate
+		paymentStatus := "paid"
+		delay := 0
+
+		if status == "delayed" && i == 0 {
+			paymentStatus = "overdue"
+			delay = daysOverdue
+			paymentDate = time.Time{}
+		} else if status == "critical" && i < 2 {
+			paymentStatus = "overdue"
+			delay = daysOverdue
+			paymentDate = time.Time{}
+		} else if seed%5 == 0 && i == 2 {
+			delay = 2
+			paymentDate = dueDate.AddDate(0, 0, delay)
+		} else if seed%7 == 0 && i == 4 {
+			delay = 1
+			paymentDate = dueDate.AddDate(0, 0, delay)
+		}
+
+		item := map[string]interface{}{
+			"due_date":   dueDate.Format("2006-01-02"),
+			"amount":     monthlyPayment,
+			"status":     paymentStatus,
+			"days_delay": delay,
+		}
+		if !paymentDate.IsZero() {
+			item["payment_date"] = paymentDate.Format("2006-01-02")
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+func numberFromMap(data map[string]interface{}, keys ...string) float64 {
+	for _, key := range keys {
+		switch value := data[key].(type) {
+		case float64:
+			return value
+		case int:
+			return float64(value)
+		case json.Number:
+			number, _ := value.Float64()
+			return number
+		}
+	}
+	return 0
+}
+
+func rawString(data map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := data[key].(string); ok {
+			return value
+		}
+	}
+	return ""
+}
+
+func buildDelinquencyHistory(count int, maxDays int, current bool) string {
+	if count == 0 && maxDays == 0 && !current {
+		return "[]"
+	}
+
+	items := make([]map[string]interface{}, 0, count)
+	if count == 0 {
+		count = 1
+	}
+	for i := 0; i < count; i++ {
+		days := maxDays
+		if days == 0 {
+			days = 15
+		}
+		if count > 1 && i < count-1 {
+			days = 5 + i*5
+			if days > maxDays && maxDays > 0 {
+				days = maxDays
+			}
+		}
+		items = append(items, map[string]interface{}{
+			"type":     "Просрочка платежа",
+			"days":     days,
+			"date":     time.Now().AddDate(0, -i-1, 0).Format("2006-01-02"),
+			"resolved": !current || i < count-1,
+		})
+	}
+
+	return mustJSON(items)
+}
+
+func mustJSON(value interface{}) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprint(value)
+	}
+	return string(data)
 }

@@ -53,4 +53,30 @@ func MigrateTables(db *gorm.DB) {
 		repUser.HashPassword("rep123")
 		db.Create(&repUser)
 	}
+
+	ensureUser(db, "analyst2", "analyst2@example.com", "analyst", "Мария Смирнова", "analyst223")
+	ensureUser(db, "analyst3", "analyst3@example.com", "analyst", "Дмитрий Соколов", "analyst323")
+	ensureUser(db, "analyst4", "analyst4@example.com", "analyst", "Елена Кузнецова", "analyst423")
+}
+
+func ensureUser(db *gorm.DB, username, email, role, fullName, password string) {
+	var existing models.User
+	if err := db.Where("username = ?", username).First(&existing).Error; err == nil {
+		updates := map[string]interface{}{
+			"email":     email,
+			"role":      role,
+			"full_name": fullName,
+		}
+		db.Model(&existing).Updates(updates)
+		return
+	}
+
+	user := models.User{
+		Username: username,
+		Email:    email,
+		Role:     role,
+		FullName: fullName,
+	}
+	user.HashPassword(password)
+	db.Create(&user)
 }

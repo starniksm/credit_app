@@ -19,6 +19,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	adminHandler := handlers.NewAdminHandler(db)
 	repHandler := handlers.NewRepresentativeHandler(db)
 	docHandler := handlers.NewDocumentHandler(db)
+	adminUserHandler := handlers.NewAdminUserHandler(db)
 
 	// Define routes
 	api := r.Group("/api")
@@ -40,7 +41,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 				applications.GET("/", appHandler.GetApplications)
 				applications.GET("/:id", appHandler.GetApplicationByID)
 				applications.PUT("/:id", appHandler.UpdateApplication)
-				applications.DELETE("/:id", appHandler.DeleteApplication)
+				applications.DELETE("/:id", middleware.RoleMiddleware("admin"), appHandler.DeleteApplication)
 
 				// BKI endpoints
 				applications.POST("/:id/request-bki", appHandler.RequestBKIData)
@@ -48,6 +49,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 
 			// Admin/Analyst-specific endpoints
 			admin := protected.Group("/admin")
+			admin.Use(middleware.AnalystOnly())
 			{
 				admin.GET("/dashboard/stats", adminHandler.GetDashboardStats)
 				admin.GET("/reports/data", adminHandler.GetReportsData)
@@ -63,8 +65,21 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 				admin.POST("/applications/:id/ai-recommendation", adminHandler.GenerateAIRecommendation)
 			}
 
+			// Admin panel endpoints (admin only)
+			adminPanel := protected.Group("/admin-panel")
+			adminPanel.Use(middleware.RoleMiddleware("admin"))
+			{
+				adminPanel.GET("/users", adminUserHandler.GetUsers)
+				adminPanel.POST("/users", adminUserHandler.CreateUser)
+				adminPanel.PUT("/users/:id", adminUserHandler.UpdateUser)
+				adminPanel.PUT("/users/:id/password", adminUserHandler.ChangeUserPassword)
+				adminPanel.PUT("/users/:id/role", adminUserHandler.UpdateUserRole)
+				adminPanel.DELETE("/users/:id", adminUserHandler.DeleteUser)
+			}
+
 			// Representative-specific endpoints
 			representative := protected.Group("/representative")
+			representative.Use(middleware.RepresentativeOnly())
 			{
 				representative.GET("/clients", repHandler.GetClients)
 				representative.GET("/clients/:id", repHandler.GetClientByID)
@@ -100,6 +115,12 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/analyst", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-cache")
 		c.File("./static/admin.html")
+	})
+
+	// Admin panel
+	r.GET("/admin-panel", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/admin-panel.html")
 	})
 
 	r.GET("/application/:id", func(c *gin.Context) {
@@ -147,6 +168,11 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/representative/meeting-status", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-cache")
 		c.File("./static/representative/meeting-status.html")
+	})
+
+	r.GET("/representative/new-application", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/representative/new-application.html")
 	})
 
 	// Health check endpoint (public)
