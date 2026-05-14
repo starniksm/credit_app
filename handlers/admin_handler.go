@@ -131,7 +131,7 @@ func (h *AdminHandler) UpdateApplicationStatus(c *gin.Context) {
 	}
 
 	var req struct {
-		Status string `json:"status" binding:"required,oneof=approved rejected pending new in_review manual_review"`
+		Status string `json:"status" binding:"required,oneof=approved rejected pending new in_review manual_review contract_sent issued"`
 		Notes  string `json:"notes,omitempty"`
 	}
 
@@ -167,7 +167,11 @@ func (h *AdminHandler) UpdateApplicationStatus(c *gin.Context) {
 	if req.Status == "approved" || req.Status == "rejected" {
 		now := time.Now()
 		if application.ReviewStartedAt == nil {
-			application.ReviewStartedAt = &now
+			startedAt := application.CreatedAt
+			if startedAt.IsZero() {
+				startedAt = now
+			}
+			application.ReviewStartedAt = &startedAt
 		}
 		application.ReviewCompletedAt = &now
 	}
@@ -303,7 +307,11 @@ func (h *AdminHandler) MakeDecision(c *gin.Context) {
 	}
 	now := time.Now()
 	if application.ReviewStartedAt == nil {
-		application.ReviewStartedAt = &now
+		startedAt := application.CreatedAt
+		if startedAt.IsZero() {
+			startedAt = now
+		}
+		application.ReviewStartedAt = &startedAt
 	}
 	application.ReviewCompletedAt = &now
 
@@ -366,13 +374,34 @@ func approvedAmountExpr() string {
 }
 
 func avgProcessingMinutes(db *gorm.DB, query string, args ...interface{}) float64 {
-	var value float64
-	db.Model(&models.CreditApplication{}).
+	var applications []models.CreditApplication
+	if err := db.Model(&models.CreditApplication{}).
 		Where("review_started_at IS NOT NULL AND review_completed_at IS NOT NULL").
 		Where(query, args...).
-		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (review_completed_at - review_started_at)) / 60), 0)").
-		Scan(&value)
-	return value
+		Find(&applications).Error; err != nil {
+		return 0
+	}
+
+	var totalMinutes float64
+	var counted int
+	for _, app := range applications {
+		if app.ReviewStartedAt == nil || app.ReviewCompletedAt == nil {
+			continue
+		}
+		duration := app.ReviewCompletedAt.Sub(*app.ReviewStartedAt)
+		if duration <= 0 && !app.CreatedAt.IsZero() {
+			duration = app.ReviewCompletedAt.Sub(app.CreatedAt)
+		}
+		if duration < 0 {
+			continue
+		}
+		totalMinutes += duration.Minutes()
+		counted++
+	}
+	if counted == 0 {
+		return 0
+	}
+	return totalMinutes / float64(counted)
 }
 
 func periodRange(period string, now time.Time) (time.Time, time.Time) {
@@ -497,6 +526,8 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 		"new":                 "Новые",
 		"in_review":           "В работе",
 		"approved":            "Одобрено",
+		"contract_sent":       "На подписании",
+		"issued":              "Кредит выдан",
 		"rejected":            "Отклонено",
 		"manual_review":       "Ручная проверка",
 		"pending":             "Ожидает",
@@ -507,6 +538,8 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 		"new":                 "#17a2b8",
 		"in_review":           "#ffc107",
 		"approved":            "#28a745",
+		"contract_sent":       "#6f42c1",
+		"issued":              "#198754",
 		"rejected":            "#dc3545",
 		"manual_review":       "#6f42c1",
 		"pending":             "#6c757d",
@@ -615,7 +648,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 		db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "approved", monthStart, monthEnd).Count(&approved)
 		db.Model(&models.CreditApplication{}).Where("status = ? AND created_at >= ? AND created_at < ?", "rejected", monthStart, monthEnd).Count(&rejected)
 
-		avgTime := avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd)
+		avgTime := avgProcessingMinutes(db, "review_completed_at >= ? AND review_completed_at < ?", monthStart, monthEnd)
 
 		reportsData.MonthlyStats[5-i] = struct {
 			Month          string  `json:"month"`
@@ -733,7 +766,7 @@ func (h *AdminHandler) GetReportsData(c *gin.Context) {
 			rate = float64(approved) * 100.0 / float64(totalApps)
 		}
 
-		avgTime := avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", monthStart, monthEnd)
+		avgTime := avgProcessingMinutes(db, "review_completed_at >= ? AND review_completed_at < ?", monthStart, monthEnd)
 
 		reportsData.ApprovalRate[5-i] = struct {
 			Month string  `json:"month"`
@@ -860,7 +893,7 @@ func (h *AdminHandler) GetMetricsByPeriod(c *gin.Context) {
 		metrics.ApprovalRate = float64(metrics.Approved) * 100.0 / float64(metrics.TotalApplications)
 	}
 
-	metrics.AvgProcessingTime = avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", startDate, endDate)
+	metrics.AvgProcessingTime = avgProcessingMinutes(db, "review_completed_at >= ? AND review_completed_at < ?", startDate, endDate)
 
 	var prevTotalApplications, prevApproved int64
 	var prevApprovedAmount float64
@@ -872,7 +905,7 @@ func (h *AdminHandler) GetMetricsByPeriod(c *gin.Context) {
 	if prevTotalApplications > 0 {
 		prevApprovalRate = float64(prevApproved) * 100.0 / float64(prevTotalApplications)
 	}
-	prevAvgProcessingTime := avgProcessingMinutes(db, "review_started_at >= ? AND review_started_at < ?", prevStartDate, prevEndDate)
+	prevAvgProcessingTime := avgProcessingMinutes(db, "review_completed_at >= ? AND review_completed_at < ?", prevStartDate, prevEndDate)
 
 	metrics.Changes.TotalApplications = percentChange(float64(metrics.TotalApplications), float64(prevTotalApplications))
 	metrics.Changes.Approved = percentChange(float64(metrics.Approved), float64(prevApproved))

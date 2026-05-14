@@ -33,6 +33,8 @@
         .role-card.analyst:hover { background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); }
         .role-card.representative { border-color: #28a745; }
         .role-card.representative:hover { background: rgba(40, 167, 69, 0.1); }
+        .role-card.credit_manager { border-color: #f59e0b; }
+        .role-card.credit_manager:hover { background: rgba(245, 158, 11, 0.12); }
         .role-card.admin { border-color: #1a1a2e; }
         .role-card.admin:hover { background: rgba(26, 26, 46, 0.08); }
         
@@ -42,6 +44,7 @@
         
         .role-card.analyst .icon { color: #667eea; }
         .role-card.representative .icon { color: #28a745; }
+        .role-card.credit_manager .icon { color: #f59e0b; }
         .role-card.admin .icon { color: #1a1a2e; }
         
         .role-label { font-size: 12px; color: #999; text-align: center; margin-top: 15px; }
@@ -71,6 +74,11 @@
                         <div class="icon">🏦</div>
                         <h3>Представитель банка</h3>
                         <p>Работа с одобренными клиентами, оформление кредитных карт, встречи</p>
+                    </div>
+                    <div class="role-card credit_manager" onclick="showLoginForRole('credit_manager')">
+                        <div class="icon">₽</div>
+                        <h3>Кредитный менеджер</h3>
+                        <p>Контроль проблемных клиентов, оценка финансового состояния и реструктуризация</p>
                     </div>
                     <div class="role-card admin" onclick="showLoginForRole('admin')">
                         <div class="icon">⚙</div>
@@ -121,6 +129,9 @@
             } else if (role === 'representative') {
                 document.getElementById('card-title').textContent = 'Вход для представителя';
                 document.getElementById('card-subtitle').textContent = 'Введите учетные данные представителя банка';
+            } else if (role === 'credit_manager') {
+                document.getElementById('card-title').textContent = 'Вход для кредитного менеджера';
+                document.getElementById('card-subtitle').textContent = 'Введите учетные данные кредитного менеджера';
             } else {
                 document.getElementById('card-title').textContent = 'Вход администратора';
                 document.getElementById('card-subtitle').textContent = 'Введите учетные данные администратора';
@@ -167,6 +178,11 @@
                         return;
                     }
 
+                    if (selectedRole === 'credit_manager' && userRole !== 'credit_manager' && userRole !== 'admin') {
+                        showError('У вас нет доступа к роли Кредитный менеджер.');
+                        return;
+                    }
+
                     if (selectedRole === 'admin' && userRole !== 'admin') {
                         showError('У вас нет доступа к панели администратора.');
                         return;
@@ -186,6 +202,8 @@
                         window.location.href = '/admin-panel';
                     } else if (selectedRole === 'analyst') {
                         window.location.href = '/analyst';
+                    } else if (selectedRole === 'credit_manager') {
+                        window.location.href = '/credit-manager';
                     } else {
                         window.location.href = '/representative/clients';
                     }

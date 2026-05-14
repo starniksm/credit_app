@@ -11,6 +11,10 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=credit_db
+      - CLIENT_APP_BASE_URL=http://host.docker.internal:8000
+      - CONTRACT_DELIVERY_TOKEN=dev-contract-token
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

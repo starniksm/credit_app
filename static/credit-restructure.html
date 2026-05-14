@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Изменение условий кредита - Credit App</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f6f8; color: #1f2933; min-height: 100vh; }
+        .hidden { display: none !important; }
+        .header { background: #1f2937; color: white; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .header h1 { font-size: 21px; }
+        .nav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .nav a, .logout-btn { color: white; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); text-decoration: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+        .container { max-width: 1180px; margin: 0 auto; padding: 22px; }
+        .message { margin-bottom: 14px; padding: 12px 14px; border-radius: 6px; font-size: 14px; }
+        .message.ok { background: #dcfce7; color: #166534; }
+        .message.error { background: #fee2e2; color: #991b1b; }
+        .layout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(420px, 1.1fr); gap: 18px; align-items: start; }
+        .panel { background: white; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+        .panel-header { padding: 16px 18px; border-bottom: 1px solid #e5e7eb; }
+        .panel-title { font-size: 17px; font-weight: 800; }
+        .panel-body { padding: 18px; }
+        .client-name { font-size: 21px; font-weight: 800; margin-bottom: 4px; }
+        .muted { color: #6b7280; font-size: 13px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+        .info { background: #f8fafc; border-radius: 6px; padding: 11px; }
+        .info .k { color: #64748b; font-size: 12px; margin-bottom: 4px; }
+        .info .v { font-weight: 800; }
+        .recommendation { margin-top: 14px; border: 1px solid #dbeafe; background: #eff6ff; border-radius: 8px; padding: 14px; }
+        .recommendation h3 { font-size: 16px; margin-bottom: 8px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field.full { grid-column: 1 / -1; }
+        label { color: #475569; font-size: 13px; font-weight: 700; }
+        input, select { width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 11px; font: inherit; background: white; }
+        .actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+        .primary-btn { border: none; border-radius: 6px; padding: 10px 14px; cursor: pointer; font-weight: 700; }
+        .primary-btn { background: #2563eb; color: white; }
+        .calc-note { margin-top: 12px; color: #155e75; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+        @media (max-width: 900px) {
+            .layout, .form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Изменение условий кредита</h1>
+        <div class="nav">
+            <a href="/credit-manager">Назад к клиентам</a>
+            <a href="/role-select">Выбор роли</a>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
+        </div>
+    </div>
+
+    <main class="container">
+        <div id="message" class="message hidden"></div>
+        <section class="layout">
+            <aside class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Клиент и текущий кредит</div>
+                </div>
+                <div id="client-card" class="panel-body">
+                    <div class="muted">Загрузка данных...</div>
+                </div>
+            </aside>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Новые условия кредита</div>
+                </div>
+                <div class="panel-body">
+                    <div class="form-grid">
+                        <div class="field full">
+                            <label for="conditionType">Новое условие по кредиту</label>
+                            <select id="conditionType">
+                                <option value="payment_reduction">Снижение ежемесячного платежа</option>
+                                <option value="term_change">Изменение срока кредита</option>
+                                <option value="grace_period">Льготный период</option>
+                                <option value="custom">Индивидуальные условия</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="newPayment">Новый ежемесячный платеж</label>
+                            <input id="newPayment" type="number" min="1" step="100">
+                        </div>
+                        <div class="field">
+                            <label for="newTerm">Новый срок, месяцев</label>
+                            <input id="newTerm" type="number" min="1" step="1">
+                        </div>
+                        <div class="field">
+                            <label for="graceMonths">Льготный период, месяцев</label>
+                            <input id="graceMonths" type="number" min="0" step="1">
+                        </div>
+                        <div class="field full">
+                            <label>Расчет</label>
+                            <div id="calc-summary" class="calc-note">Расчет будет выполнен после загрузки заявки.</div>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="primary-btn" onclick="saveRestructure()">Сохранить новые условия</button>
+                    </div>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('adminToken');
+        const selectedRole = localStorage.getItem('selectedRole');
+        const appId = decodeURIComponent(window.location.pathname.split('/').pop());
+        let application = null;
+        let recommendation = null;
+        let balance = 0;
+        let syncing = false;
+
+        init();
+
+        function init() {
+            if (!token || (selectedRole !== 'credit_manager' && selectedRole !== 'admin')) {
+                window.location.href = '/role-select';
+                return;
+            }
+            loadAssessment();
+        }
+
+        async function loadAssessment() {
+            try {
+                const response = await fetch(`/api/credit-manager/clients/${encodeURIComponent(appId)}/assessment`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Ошибка загрузки клиента');
+                application = data.application;
+                recommendation = data.recommendation;
+                balance = Number(application.approvedAmount || application.requestedAmount || 0);
+                renderClient();
+                fillRecommendation();
+                bindCalculations();
+            } catch (err) {
+                showMessage(err.message, 'error');
+            }
+        }
+
+        function renderClient() {
+            document.getElementById('client-card').innerHTML = `
+                <div class="client-name">${application.clientName}</div>
+                <div class="muted">${application.id} · ${application.phone || 'телефон не указан'} · ${application.email || 'email не указан'}</div>
+                <div class="info-grid">
+                    <div class="info"><div class="k">Сумма кредита</div><div class="v">${formatCurrency(application.approvedAmount || application.requestedAmount)}</div></div>
+                    <div class="info"><div class="k">Текущий срок</div><div class="v">${application.creditTerm || 0} мес.</div></div>
+                    <div class="info"><div class="k">Текущий платеж</div><div class="v">${formatCurrency(application.monthlyPayment || application.monthlyPayments)}</div></div>
+                    <div class="info"><div class="k">Доход</div><div class="v">${formatCurrency(application.monthlyIncome)}</div></div>
+                    <div class="info"><div class="k">DTI</div><div class="v">${formatPercent(application.dtiRatio)}</div></div>
+                    <div class="info"><div class="k">Просрочка</div><div class="v">${application.maxDelinquencyDays || 0} дн.</div></div>
+                </div>
+                <div class="recommendation">
+                    <h3>${recommendation.summary}</h3>
+                    <div><strong>Рекомендация:</strong> ${recommendation.recommendedPlan}</div>
+                    <div><strong>Ориентир:</strong> ${formatCurrency(recommendation.newPayment)} на ${recommendation.newTermMonths} мес., льготный период ${recommendation.graceMonths} мес.</div>
+                </div>
+            `;
+        }
+
+        function fillRecommendation() {
+            document.getElementById('newPayment').value = Math.round(recommendation.newPayment || application.monthlyPayment || application.monthlyPayments || 0);
+            document.getElementById('newTerm').value = recommendation.newTermMonths || application.creditTerm || 1;
+            document.getElementById('graceMonths').value = recommendation.graceMonths || 0;
+            updateCalculationSummary();
+        }
+
+        function bindCalculations() {
+            const paymentInput = document.getElementById('newPayment');
+            const termInput = document.getElementById('newTerm');
+            paymentInput.oninput = () => {
+                if (syncing) return;
+                syncing = true;
+                const payment = Number(paymentInput.value);
+                if (balance > 0 && payment > 0) {
+                    termInput.value = Math.max(1, Math.ceil(balance / payment));
+                }
+                syncing = false;
+                updateCalculationSummary();
+            };
+            termInput.oninput = () => {
+                if (syncing) return;
+                syncing = true;
+                const term = Number(termInput.value);
+                if (balance > 0 && term > 0) {
+                    paymentInput.value = Math.ceil((balance / term) / 100) * 100;
+                }
+                syncing = false;
+                updateCalculationSummary();
+            };
+            document.getElementById('graceMonths').oninput = updateCalculationSummary;
+        }
+
+        async function saveRestructure() {
+            try {
+                const payload = {
+                    newPayment: Number(document.getElementById('newPayment').value),
+                    newTermMonths: Number(document.getElementById('newTerm').value),
+                    graceMonths: Number(document.getElementById('graceMonths').value)
+                };
+                const response = await fetch(`/api/credit-manager/clients/${encodeURIComponent(appId)}/restructure`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Ошибка сохранения условий');
+                showMessage(data.message, 'ok');
+                setTimeout(() => window.location.href = '/credit-manager', 900);
+            } catch (err) {
+                showMessage(err.message, 'error');
+            }
+        }
+
+        function updateCalculationSummary() {
+            const payment = Number(document.getElementById('newPayment').value || 0);
+            const term = Number(document.getElementById('newTerm').value || 0);
+            const grace = Number(document.getElementById('graceMonths').value || 0);
+            document.getElementById('calc-summary').textContent =
+                `Расчет от суммы ${formatCurrency(balance)}: платеж ${formatCurrency(payment)}, срок ${term} мес., льготный период ${grace} мес.`;
+        }
+
+        function showMessage(text, type) {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = `message ${type}`;
+            setTimeout(() => el.classList.add('hidden'), 3500);
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('userData');
+            localStorage.removeItem('selectedRole');
+            window.location.href = '/role-select';
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value || 0);
+        }
+
+        function formatPercent(value) {
+            return `${((value || 0) * 100).toFixed(1)}%`;
+        }
+    </script>
+</body>
+</html>

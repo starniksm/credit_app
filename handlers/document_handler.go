@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -493,7 +495,7 @@ func (h *DocumentHandler) buildSchedulePDF(pdf *gofpdf.Fpdf, app models.CreditAp
 	pdf.Cell(0, 5, "Шаблон подготовлен экспертами Бизнес-секретов")
 }
 
-// SendDocumentsToClient sends documents to client email
+// SendDocumentsToClient sends the generated contract to the client application.
 func (h *DocumentHandler) SendDocumentsToClient(c *gin.Context) {
 	appID := c.Param("id")
 
@@ -509,11 +511,333 @@ func (h *DocumentHandler) SendDocumentsToClient(c *gin.Context) {
 		return
 	}
 
+	var req struct {
+		ContractNumber string  `json:"contract_number"`
+		ProductName    string  `json:"product_name"`
+		Amount         float64 `json:"amount"`
+		Term           int     `json:"term"`
+		Rate           float64 `json:"rate"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	if req.ContractNumber == "" {
+		req.ContractNumber = appID
+	}
+	if req.ProductName == "" {
+		req.ProductName = app.CreditType
+	}
+	if req.Amount <= 0 {
+		req.Amount = app.RequestedAmount
+	}
+	if req.Term <= 0 {
+		req.Term = app.CreditTerm
+	}
+	if req.Rate <= 0 {
+		req.Rate = 14
+	}
+
+	payload := map[string]interface{}{
+		"application_id":  appID,
+		"contract_number": req.ContractNumber,
+		"product_name":    req.ProductName,
+		"amount":          req.Amount,
+		"term":            req.Term,
+		"rate":            req.Rate,
+	}
+	if err := sendContractToClientApp(payload); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	now := time.Now()
+	app.Status = "contract_sent"
+	app.LastStatusChangeAt = &now
+	app.AddActionToHistory("contract_sent", "Кредитный аналитик", fmt.Sprintf("Договор №%s отправлен клиенту", req.ContractNumber))
+	if err := h.db.Save(&app).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось обновить статус заявки: " + err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("Документы отправлены на %s", email),
+		"message": fmt.Sprintf("Договор отправлен клиенту на %s", email),
 		"email":   email,
 		"client":  app.ClientName,
+		"status":  app.Status,
 	})
+}
+
+// MarkContractSigned updates the bank-side application after the client signs the contract.
+func (h *DocumentHandler) MarkContractSigned(c *gin.Context) {
+	if c.GetHeader("X-Contract-Token") != contractDeliveryToken() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Недействительный токен"})
+		return
+	}
+
+	appID := c.Param("id")
+	var app models.CreditApplication
+	if err := h.db.First(&app, "id = ?", appID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Заявка не найдена"})
+		return
+	}
+
+	var req struct {
+		ContractNumber string `json:"contract_number"`
+		SignedAt       string `json:"signed_at"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	now := time.Now()
+	app.Status = "issued"
+	app.LastStatusChangeAt = &now
+	details := "Клиент подписал кредитный договор"
+	if req.ContractNumber != "" {
+		details = fmt.Sprintf("Клиент подписал договор №%s", req.ContractNumber)
+	}
+	app.AddActionToHistory("contract_signed", "Клиент", details)
+	if err := h.db.Save(&app).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось обновить статус заявки: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Статус заявки обновлен", "status": app.Status})
+}
+
+// MarkCreditDelinquency receives delinquency facts from the client application.
+func (h *DocumentHandler) MarkCreditDelinquency(c *gin.Context) {
+	if c.GetHeader("X-Contract-Token") != contractDeliveryToken() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Недействительный токен"})
+		return
+	}
+
+	var payload map[string]interface{}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректные данные просрочки: " + err.Error()})
+		return
+	}
+	req := struct {
+		ApplicationID        string
+		ActiveCredits        int
+		TotalCredits         int
+		TotalDebt            float64
+		DelayedPayments12m   int
+		CurrentDelinquencies bool
+		MaxDelinquencyDays   int
+		ActiveCreditsList    string
+		DebtBurdenDetails    string
+		DaysOverdue          int
+		MissedPayments       int
+		NextPaymentDate      string
+	}{
+		ApplicationID:        stringValue(payload["application_id"]),
+		ActiveCredits:        intValue(payload["active_credits"]),
+		TotalCredits:         intValue(payload["total_credits"]),
+		TotalDebt:            floatValue(payload["total_debt"]),
+		DelayedPayments12m:   intValue(payload["delayed_payments_12m"]),
+		CurrentDelinquencies: boolValue(payload["current_delinquencies"]),
+		MaxDelinquencyDays:   intValue(payload["max_delinquency_days"]),
+		ActiveCreditsList:    stringValue(payload["active_credits_list"]),
+		DebtBurdenDetails:    stringValue(payload["debt_burden_details"]),
+		DaysOverdue:          intValue(payload["days_overdue"]),
+		MissedPayments:       intValue(payload["missed_payments"]),
+		NextPaymentDate:      stringValue(payload["next_payment_date"]),
+	}
+	if req.ApplicationID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Не передан ID заявки"})
+		return
+	}
+
+	var app models.CreditApplication
+	if err := h.db.First(&app, "id = ?", req.ApplicationID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Заявка не найдена"})
+		return
+	}
+
+	app.ActiveCredits = req.ActiveCredits
+	if req.TotalCredits > 0 {
+		app.TotalCredits = req.TotalCredits
+	}
+	app.TotalDebt = req.TotalDebt
+	app.DelayedPayments12m = req.DelayedPayments12m
+	app.CurrentDelinquencies = req.CurrentDelinquencies || req.DaysOverdue > 0
+	app.MaxDelinquencyDays = req.MaxDelinquencyDays
+	if req.DaysOverdue > app.MaxDelinquencyDays {
+		app.MaxDelinquencyDays = req.DaysOverdue
+	}
+	if req.MissedPayments > app.DelayedPayments12m {
+		app.DelayedPayments12m = req.MissedPayments
+	}
+	app.ActiveCreditsList = req.ActiveCreditsList
+	app.DebtBurdenDetails = req.DebtBurdenDetails
+	if app.CurrentDelinquencies && app.RiskScore < 70 {
+		app.RiskScore = 70
+	}
+
+	details := fmt.Sprintf("Зафиксирована просрочка по кредиту: %d дн.", app.MaxDelinquencyDays)
+	if req.NextPaymentDate != "" {
+		details = fmt.Sprintf("Зафиксирована просрочка по кредиту: %d дн., дата платежа %s", app.MaxDelinquencyDays, req.NextPaymentDate)
+	}
+	app.AddActionToHistory("credit_delinquency", "Система", details)
+
+	if err := h.db.Save(&app).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось сохранить просрочку: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":               "Просрочка зафиксирована",
+		"application_id":        app.ID,
+		"current_delinquencies": app.CurrentDelinquencies,
+		"max_delinquency_days":  app.MaxDelinquencyDays,
+	})
+}
+
+// MarkRestructureDecision applies or logs the client decision on proposed credit terms.
+func (h *DocumentHandler) MarkRestructureDecision(c *gin.Context) {
+	if c.GetHeader("X-Contract-Token") != contractDeliveryToken() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Недействительный токен"})
+		return
+	}
+
+	var payload map[string]interface{}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректные данные решения: " + err.Error()})
+		return
+	}
+	appID := stringValue(payload["application_id"])
+	decision := stringValue(payload["decision"])
+	if appID == "" || decision == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Не переданы ID заявки или решение клиента"})
+		return
+	}
+
+	var app models.CreditApplication
+	if err := h.db.First(&app, "id = ?", appID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Заявка не найдена"})
+		return
+	}
+
+	newPayment := floatValue(payload["new_payment"])
+	newTerm := intValue(payload["new_term_months"])
+	graceMonths := intValue(payload["grace_months"])
+	if decision == "accepted" {
+		if newPayment > 0 {
+			app.MonthlyPayment = newPayment
+		}
+		if newTerm > 0 {
+			app.CreditTerm = newTerm
+		}
+		app.CurrentDelinquencies = false
+		app.MaxDelinquencyDays = 0
+		app.DelayedPayments12m = 0
+		details := fmt.Sprintf("Клиент принял новые условия кредита: платеж %.0f ₽, срок %d мес., льготный период %d мес.", newPayment, newTerm, graceMonths)
+		app.AddActionToHistory("restructure_accepted", "Клиент", details)
+		app.Notes = strings.TrimSpace(app.Notes + "\\n" + time.Now().Format("2006-01-02 15:04") + " " + details)
+	} else {
+		details := "Клиент отказался от новых условий. Заявка передана в отдел взысканий."
+		app.AddActionToHistory("collections_transfer", "Система", details)
+		app.Notes = strings.TrimSpace(app.Notes + "\\n" + time.Now().Format("2006-01-02 15:04") + " " + details)
+	}
+
+	if err := h.db.Save(&app).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось сохранить решение: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Решение клиента зафиксировано", "application_id": app.ID, "decision": decision})
+}
+
+func stringValue(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func intValue(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		parsed, _ := strconv.Atoi(v)
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func floatValue(value interface{}) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case string:
+		parsed, _ := strconv.ParseFloat(v, 64)
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func boolValue(value interface{}) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, _ := strconv.ParseBool(v)
+		return parsed
+	default:
+		return false
+	}
+}
+
+func sendContractToClientApp(payload map[string]interface{}) error {
+	baseURL := os.Getenv("CLIENT_APP_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:8000"
+	}
+	token := contractDeliveryToken()
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	url := strings.TrimRight(baseURL, "/") + "/api/contracts/receive/"
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Contract-Token", token)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("клиентское приложение недоступно: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("клиентское приложение вернуло HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func contractDeliveryToken() string {
+	token := os.Getenv("CONTRACT_DELIVERY_TOKEN")
+	if token == "" {
+		return "dev-contract-token"
+	}
+	return token
 }
 
 // getFontDir returns the absolute path to the fonts directory

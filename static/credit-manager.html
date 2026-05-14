@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кредитный менеджер - Credit App</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f6f8; color: #1f2933; min-height: 100vh; }
+        .hidden { display: none !important; }
+        .header { background: #1f2937; color: white; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .header h1 { font-size: 22px; }
+        .nav { display: flex; gap: 10px; align-items: center; }
+        .nav a, .logout-btn { color: white; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); text-decoration: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+        .nav a:hover, .logout-btn:hover { background: rgba(255,255,255,.16); }
+        .container { max-width: 1360px; margin: 0 auto; padding: 22px; }
+        .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+        .summary-card { background: white; border-radius: 8px; padding: 16px; border: 1px solid #e5e7eb; }
+        .summary-card .label { color: #6b7280; font-size: 13px; margin-bottom: 8px; }
+        .summary-card .value { font-size: 26px; font-weight: 700; }
+        .layout { display: grid; grid-template-columns: minmax(560px, 1.25fr) minmax(360px, .75fr); gap: 18px; align-items: start; }
+        .panel { background: white; border-radius: 8px; border: 1px solid #e5e7eb; overflow: hidden; }
+        .panel-header { padding: 16px 18px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .panel-title { font-size: 17px; font-weight: 700; }
+        .refresh-btn, .primary-btn, .secondary-btn { border: none; border-radius: 6px; padding: 9px 13px; cursor: pointer; font-weight: 600; }
+        .refresh-btn { background: #eef2ff; color: #3730a3; }
+        .primary-btn { background: #2563eb; color: white; }
+        .primary-btn:disabled { background: #9ca3af; cursor: default; }
+        .secondary-btn { background: #ecfeff; color: #155e75; border: 1px solid #a5f3fc; }
+        .actions { margin-top: 14px; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 14px; border-bottom: 1px solid #eef0f3; text-align: left; font-size: 13px; vertical-align: top; }
+        th { background: #f8fafc; color: #475569; font-weight: 700; }
+        tr { cursor: pointer; }
+        tr:hover { background: #f9fafb; }
+        tr.active { background: #eff6ff; }
+        .badge { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+        .badge.low { background: #dcfce7; color: #166534; }
+        .badge.medium { background: #fef3c7; color: #92400e; }
+        .badge.high { background: #fee2e2; color: #991b1b; }
+        .badge.critical { background: #7f1d1d; color: white; }
+        .detail { padding: 18px; }
+        .empty { padding: 34px 18px; text-align: center; color: #6b7280; }
+        .client-name { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+        .muted { color: #6b7280; font-size: 13px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+        .info { background: #f8fafc; border-radius: 6px; padding: 10px; }
+        .info .k { color: #64748b; font-size: 12px; margin-bottom: 4px; }
+        .info .v { font-weight: 700; }
+        .recommendation { border: 1px solid #dbeafe; background: #eff6ff; border-radius: 8px; padding: 14px; margin-top: 12px; }
+        .recommendation h3 { font-size: 16px; margin-bottom: 8px; }
+        .income-panel { border: 1px solid #bae6fd; background: #f0f9ff; border-radius: 8px; padding: 14px; margin-top: 12px; }
+        .income-panel h3 { font-size: 16px; margin-bottom: 8px; }
+        .reasons { margin: 10px 0 0 18px; color: #334155; font-size: 13px; line-height: 1.55; }
+        .message { margin-bottom: 14px; padding: 12px 14px; border-radius: 6px; font-size: 14px; }
+        .message.ok { background: #dcfce7; color: #166534; }
+        .message.error { background: #fee2e2; color: #991b1b; }
+        @media (max-width: 1000px) {
+            .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .layout { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Кредитный менеджер</h1>
+        <div class="nav">
+            <a href="/role-select">Выбор роли</a>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
+        </div>
+    </div>
+
+    <main class="container">
+        <div id="message" class="message hidden"></div>
+        <section class="summary">
+            <div class="summary-card">
+                <div class="label">Не платят сейчас</div>
+                <div class="value" id="stat-total">0</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">С текущей просрочкой</div>
+                <div class="value" id="stat-overdue">0</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Средний DTI</div>
+                <div class="value" id="stat-dti">0%</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Рекомендована реструктуризация</div>
+                <div class="value" id="stat-restructure">0</div>
+            </div>
+        </section>
+
+        <section class="layout">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Клиенты, которые сейчас не выплачивают кредит</div>
+                    <button class="refresh-btn" onclick="loadClients()">Обновить</button>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Клиент</th>
+                                <th>Кредит</th>
+                                <th>DTI</th>
+                                <th>Просрочки</th>
+                                <th>Состояние</th>
+                                <th>Рекомендация</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-table"></tbody>
+                    </table>
+                </div>
+                <div id="empty-list" class="empty hidden">Нет клиентов с текущей просрочкой</div>
+            </div>
+
+            <aside class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Оценка клиента</div>
+                </div>
+                <div id="detail" class="detail">
+                    <div class="empty">Выберите клиента из списка</div>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <script>
+        const API_URL = '';
+        let token = null;
+        let clients = [];
+        let selectedId = null;
+
+        init();
+
+        function init() {
+            token = localStorage.getItem('adminToken');
+            const selectedRole = localStorage.getItem('selectedRole');
+            if (!token || (selectedRole !== 'credit_manager' && selectedRole !== 'admin')) {
+                window.location.href = '/role-select';
+                return;
+            }
+            loadClients();
+        }
+
+        async function loadClients() {
+            try {
+                const response = await fetch(`${API_URL}/api/credit-manager/clients`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/role-select';
+                    return;
+                }
+                clients = await response.json();
+                renderStats();
+                renderTable();
+                if (clients.length && !selectedId) {
+                    selectClient(clients[0].id);
+                }
+            } catch (err) {
+                showMessage('Ошибка загрузки клиентов', 'error');
+            }
+        }
+
+        function renderStats() {
+            const overdue = clients.filter(c => c.currentDelinquencies).length;
+            const avgDti = clients.length ? clients.reduce((sum, c) => sum + (c.dtiRatio || 0), 0) / clients.length : 0;
+            const recommended = clients.filter(c => c.recommendation && c.recommendation.decision === 'recommended').length;
+            document.getElementById('stat-total').textContent = clients.length;
+            document.getElementById('stat-overdue').textContent = overdue;
+            document.getElementById('stat-dti').textContent = `${(avgDti * 100).toFixed(1)}%`;
+            document.getElementById('stat-restructure').textContent = recommended;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('clients-table');
+            document.getElementById('empty-list').classList.toggle('hidden', clients.length > 0);
+            tbody.innerHTML = clients.map(client => `
+                <tr class="${client.id === selectedId ? 'active' : ''}" onclick="selectClient('${client.id}')">
+                    <td><strong>${client.clientName}</strong><div class="muted">${client.phone || ''}</div></td>
+                    <td>${formatCurrency(client.requestedAmount)}<div class="muted">${client.creditType}</div></td>
+                    <td>${formatPercent(client.dtiRatio)}</td>
+                    <td>${client.delayedPayments12m || 0} за 12 мес.<div class="muted">макс. ${client.maxDelinquencyDays || 0} дн.</div></td>
+                    <td><span class="badge ${stateClass(client.recommendation.riskLevel)}">${client.recommendation.financialState}</span></td>
+                    <td>${client.recommendation.summary}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function selectClient(id) {
+            selectedId = id;
+            renderTable();
+            try {
+                const response = await fetch(`${API_URL}/api/credit-manager/clients/${encodeURIComponent(id)}/assessment`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Ошибка оценки клиента');
+                renderDetail(data.application, data.recommendation);
+            } catch (err) {
+                showMessage(err.message, 'error');
+            }
+        }
+
+        function renderDetail(app, rec) {
+            document.getElementById('detail').innerHTML = `
+                <div class="client-name">${app.clientName}</div>
+                <div class="muted">${app.id} · ${app.phone || 'телефон не указан'} · ${app.email || 'email не указан'}</div>
+                <div class="info-grid">
+                    <div class="info"><div class="k">Сумма кредита</div><div class="v">${formatCurrency(app.requestedAmount)}</div></div>
+                    <div class="info"><div class="k">Доход</div><div class="v">${formatCurrency(app.monthlyIncome)}</div></div>
+                    <div class="info"><div class="k">Платежи по кредитам</div><div class="v">${formatCurrency(app.monthlyPayments)}</div></div>
+                    <div class="info"><div class="k">DTI</div><div class="v">${formatPercent(app.dtiRatio)}</div></div>
+                    <div class="info"><div class="k">Текущая просрочка</div><div class="v">${app.maxDelinquencyDays || 0} дн.</div></div>
+                    <div class="info"><div class="k">Риск</div><div class="v">${app.riskScore}%</div></div>
+                </div>
+                <div id="income-info" class="income-panel hidden"></div>
+                <div class="recommendation">
+                    <h3>${rec.summary}</h3>
+                    <div><strong>Финансовое состояние:</strong> ${rec.financialState}</div>
+                    <div><strong>План:</strong> ${rec.recommendedPlan}</div>
+                    <div><strong>Новый платеж:</strong> ${formatCurrency(rec.newPayment)} · снижение ${rec.paymentReduction}%</div>
+                    <div><strong>Новый срок:</strong> ${rec.newTermMonths} мес. · льготный период ${rec.graceMonths} мес.</div>
+                    <ul class="reasons">${rec.reasons.map(r => `<li>${r}</li>`).join('')}</ul>
+                </div>
+                <div class="actions">
+                    <button class="secondary-btn" onclick="requestIncomeInfo('${app.id}')">Запросить сведения о доходах</button>
+                    <button class="primary-btn" ${rec.decision !== 'recommended' ? 'disabled' : ''} onclick="openRestructure('${app.id}')">Изменить условия кредита</button>
+                </div>
+            `;
+        }
+
+        async function requestIncomeInfo(id) {
+            try {
+                const response = await fetch(`${API_URL}/api/credit-manager/clients/${encodeURIComponent(id)}/income-request`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Ошибка запроса сведений о доходах');
+                renderIncomeInfo(data.incomeInfo);
+                showMessage(data.message, 'ok');
+            } catch (err) {
+                showMessage(err.message, 'error');
+            }
+        }
+
+        function renderIncomeInfo(info) {
+            const el = document.getElementById('income-info');
+            el.classList.remove('hidden');
+            el.innerHTML = `
+                <h3>Официальные выплаты</h3>
+                <div><strong>Зарплата:</strong> ${formatCurrency(info.salary)}</div>
+                <div><strong>Пенсии:</strong> ${formatCurrency(info.pension)}</div>
+                <div><strong>Иные официальные выплаты:</strong> ${formatCurrency(info.otherOfficialPayments)}</div>
+                <div><strong>Итого подтверждено:</strong> ${formatCurrency(info.totalOfficialIncome)}</div>
+                <div class="muted">${info.source} · ${info.checkedAt}</div>
+            `;
+        }
+
+        function openRestructure(id) {
+            window.location.href = `/credit-manager/restructure/${encodeURIComponent(id)}`;
+        }
+
+        function showMessage(text, type) {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = `message ${type}`;
+            setTimeout(() => el.classList.add('hidden'), 3500);
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('userData');
+            localStorage.removeItem('selectedRole');
+            window.location.href = '/role-select';
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value || 0);
+        }
+
+        function formatPercent(value) {
+            return `${((value || 0) * 100).toFixed(1)}%`;
+        }
+
+        function stateClass(level) {
+            if (level === 'Критический') return 'critical';
+            if (level === 'Высокий') return 'high';
+            if (level === 'Средний') return 'medium';
+            return 'low';
+        }
+    </script>
+</body>
+</html>

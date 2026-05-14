@@ -516,21 +516,24 @@
             panel.classList.add('active');
             document.getElementById('editor-title').textContent = product.name;
 
+            const defaultAmount = getDefaultAmountForProduct(product);
+            const defaultTerm = getDefaultTermForProduct(product);
+
             // Setup amount range
             const amountRange = document.getElementById('editor-amount-range');
             amountRange.min = product.amountMin;
             amountRange.max = product.amountMax;
             amountRange.step = 10000;
-            amountRange.value = product.amountDefault;
-            updateEditorAmount(product.amountDefault);
+            amountRange.value = defaultAmount;
+            updateEditorAmount(defaultAmount);
 
             // Setup term range
             const termRange = document.getElementById('editor-term-range');
             termRange.min = product.termMin;
             termRange.max = product.termMax;
             termRange.step = 1;
-            termRange.value = product.termDefault;
-            updateEditorTerm(product.termDefault);
+            termRange.value = defaultTerm;
+            updateEditorTerm(defaultTerm);
 
             // Setup rates
             const rateSelect = document.getElementById('editor-rate');
@@ -562,6 +565,26 @@
         function closeEditor() {
             document.getElementById('editor-panel').classList.remove('active');
             currentEditingProduct = null;
+        }
+
+        function getDefaultAmountForProduct(product) {
+            const requestedAmount = applicationData ? Number(applicationData.requested_amount || 0) : 0;
+            if (!requestedAmount) return product.amountDefault;
+            return clampToRange(roundToStep(requestedAmount, 10000), product.amountMin, product.amountMax);
+        }
+
+        function getDefaultTermForProduct(product) {
+            const requestedTerm = applicationData ? Number(applicationData.credit_term || 0) : 0;
+            if (!requestedTerm) return product.termDefault;
+            return clampToRange(Math.round(requestedTerm), product.termMin, product.termMax);
+        }
+
+        function clampToRange(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function roundToStep(value, step) {
+            return Math.round(value / step) * step;
         }
 
         function updateEditorAmount(value) {
@@ -806,7 +829,7 @@
             console.log('Loading application data for ID:', applicationId);
 
             try {
-                const response = await fetch(`${API_URL}/api/applications/${applicationId}`, {
+                const response = await fetch(`${API_URL}/api/applications/${encodeURIComponent(applicationId)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 

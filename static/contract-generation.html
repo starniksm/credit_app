@@ -560,7 +560,7 @@
                             <button class="btn-action secondary" onclick="window.print()">
                                 <span>🖨</span> Печать
                             </button>
-                            <button class="btn-action secondary" onclick="sendToClient()">
+                            <button type="button" class="btn-action secondary" id="send-to-client-btn">
                                 <span>✉</span> Отправить клиенту
                             </button>
                         </div>
@@ -623,7 +623,7 @@
                 </div>
                 <div class="dialog-actions">
                     <button class="btn-dialog cancel" onclick="hideConfirmDialog()">Отменить</button>
-                    <button class="btn-dialog confirm" disabled>Сформировать</button>
+                    <button type="button" class="btn-dialog confirm" id="confirm-generate-btn">Сформировать</button>
                 </div>
             </div>
         </div>
@@ -650,7 +650,55 @@
         }
 
         function formatMoney(value) {
-            return Number(value).toLocaleString('ru-RU') + ' ₽';
+            return Number(value || 0).toLocaleString('ru-RU') + ' ₽';
+        }
+
+        function normalizeLoanParams(params = {}) {
+            return {
+                applicationId: params.applicationId || applicationId || getQueryParam('application_id') || '',
+                productId: params.productId || '',
+                productName: params.productName || getQueryParam('product') || '',
+                amount: Number(params.amount || params.selectedAmount || getQueryParam('amount') || 0),
+                term: Number(params.term || params.selectedTerm || getQueryParam('term') || 0),
+                rate: Number(params.rate || params.selectedRate || getQueryParam('rate') || 14),
+                type: params.type || params.selectedPaymentType || params.paymentType || getQueryParam('type') || 'annuity',
+                selectedDownPayment: Number(params.selectedDownPayment || 0),
+                monthlyPayment: params.monthlyPayment || '',
+                totalPayment: params.totalPayment || '',
+                overpayment: params.overpayment || ''
+            };
+        }
+
+        function readSavedLoanParams() {
+            const saved = localStorage.getItem('selectedLoanParams');
+            if (!saved) return null;
+            try {
+                const parsed = normalizeLoanParams(JSON.parse(saved));
+                if (!parsed.applicationId || !applicationId || parsed.applicationId === applicationId) {
+                    return parsed;
+                }
+            } catch (e) { /* ignore broken saved params */ }
+            return null;
+        }
+
+        function getLoanAmount(app = {}) {
+            return Number(loanParams?.amount || app.approved_amount || app.requested_amount || 0);
+        }
+
+        function getLoanTerm(app = {}) {
+            return Number(loanParams?.term || app.credit_term || app.repayment_term || 0);
+        }
+
+        function getLoanRate() {
+            return Number(loanParams?.rate || 14);
+        }
+
+        function getLoanPaymentType() {
+            return loanParams?.type || 'annuity';
+        }
+
+        function getSelectedProductName(app = {}) {
+            return loanParams?.productName || getProductName(app.credit_type) || getProductTypeName(app.credit_type);
         }
 
         function monthWord(n) {
@@ -672,7 +720,7 @@
             }
 
             try {
-                const response = await fetch(`${API_URL}/api/applications/${applicationId}`, {
+                const response = await fetch(`${API_URL}/api/applications/${encodeURIComponent(applicationId)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const result = await response.json();
@@ -683,6 +731,7 @@
                     populateBorrowerData(data);
                     populateContractData(data);
                     populatePreview(data);
+                    refreshSidebarFromForm(data);
                     console.log('Contract page: application data loaded successfully');
                 } else {
                     console.warn('Contract page: empty application data, using localStorage');
@@ -695,19 +744,18 @@
         }
 
         function loadFromLocalStorage() {
-            const saved = localStorage.getItem('selectedLoanParams');
-            if (saved) {
-                try {
-                    const params = JSON.parse(saved);
-                    if (params.applicationId && !applicationId) {
-                        applicationId = params.applicationId;
-                    }
-                    // If we have saved params but no app data, use what we can
-                    if (!applicationData) {
-                        populateContractDataFromParams(params);
-                        populatePreviewFromParams(params);
-                    }
-                } catch (e) { /* ignore */ }
+            const params = readSavedLoanParams();
+            if (params) {
+                loanParams = params;
+                if (params.applicationId && !applicationId) {
+                    applicationId = params.applicationId;
+                }
+                if (!applicationData) {
+                    populateContractDataFromParams(params);
+                    populatePreviewFromParams(params);
+                    updateSummaryCardFromParams(params);
+                    refreshSidebarFromForm(applicationData || {});
+                }
             }
         }
 
@@ -742,59 +790,53 @@
         }
 
         function populateContractData(app) {
-            // Contract number - use app ID without prefix letters: ПК-14556677-19-19 → 14556677-19-19
             const contractNum = getContractNumber(app.id);
             setValue('contract-number', contractNum);
+            setValue('contract-date', new Date().toISOString().split('T')[0]);
 
-            // Contract date — today
-            const today = new Date().toISOString().split('T')[0];
-            setValue('contract-date', today);
+            const amount = getLoanAmount(app);
+            const term = getLoanTerm(app);
+            const rate = getLoanRate();
+            const type = getLoanPaymentType();
 
-            // Loan parameters from URL/localStorage
-            if (loanParams) {
-                const amount = loanParams.amount || app.requested_amount || 0;
-                const term = loanParams.term || app.credit_term || 0;
-                const rate = loanParams.rate || 14;
-                const type = loanParams.type || 'annuity';
+            setValue('contract-product-type', getProductTypeName(app.credit_type));
+            setValue('contract-product-name', getSelectedProductName(app));
+            setValue('contract-amount', formatMoney(Math.round(amount)));
+            setValue('contract-term', term ? `${term} ${monthWord(term)}` : '—');
+            setValue('contract-rate', `${rate}%`);
 
-                setValue('contract-product-type', getProductTypeName(app.credit_type));
-                setValue('contract-product-name', loanParams.productName || getProductName(app.credit_type));
-                setValue('contract-amount', formatMoney(Math.round(amount)));
-                setValue('contract-term', `${term} ${monthWord(term)}`);
-                setValue('contract-rate', `${rate}%`);
-
-                // Calculate and set payment values
-                calculateAndSetResults(amount, term, rate, type);
-            }
+            calculateAndSetResults(amount, term, rate, type);
+            refreshSidebarFromForm(app);
         }
 
         function populateContractDataFromParams(params) {
-            const amount = params.selectedAmount || params.amount || 0;
-            const term = params.selectedTerm || params.term || 0;
-            const rate = params.selectedRate || params.rate || 14;
-            const type = params.selectedPaymentType || params.paymentType || 'annuity';
+            params = normalizeLoanParams(params);
+            const amount = params.amount || 0;
+            const term = params.term || 0;
+            const rate = params.rate || 14;
+            const type = params.type || 'annuity';
 
             const contractNum = params.applicationId ? getContractNumber(params.applicationId) : '000000';
             setValue('contract-number', contractNum);
             setValue('contract-date', new Date().toISOString().split('T')[0]);
             setValue('contract-product-type', getProductTypeName(''));
-            setValue('contract-product-name', params.productName || '—');
-            setValue('contract-amount', formatMoney(Math.round(amount)));
-            setValue('contract-term', `${term} ${monthWord(term)}`);
+            setValue('contract-product-name', params.productName || 'Кредитный продукт');
+            setValue('contract-amount', amount ? formatMoney(Math.round(amount)) : '—');
+            setValue('contract-term', term ? `${term} ${monthWord(term)}` : '—');
             setValue('contract-rate', `${rate}%`);
 
             calculateAndSetResults(amount, term, rate, type);
+            refreshSidebarFromForm(applicationData || {});
         }
 
         function populatePreview(app) {
             const fullName = app.client_name || app.full_name || '—';
-            const amount = loanParams ? loanParams.amount : (app.requested_amount || 0);
-            const term = loanParams ? loanParams.term : (app.credit_term || 0);
-            const rate = loanParams ? loanParams.rate : 14;
-            const type = loanParams ? loanParams.type : 'annuity';
+            const amount = getLoanAmount(app);
+            const term = getLoanTerm(app);
+            const rate = getLoanRate();
+            const type = getLoanPaymentType();
             const contractNum = document.getElementById('contract-number').value || getContractNumber(app.id);
 
-            // Update preview
             document.getElementById('preview-contract-title').textContent = `КРЕДИТНЫЙ ДОГОВОР № ${contractNum}`;
             document.getElementById('preview-borrower-name').textContent = fullName;
             const amountEl = document.getElementById('preview-amount');
@@ -802,61 +844,111 @@
             const termEl = document.getElementById('preview-term');
             const rateEl = document.getElementById('preview-rate');
 
-            if (amountEl) amountEl.textContent = formatMoney(Math.round(amount));
-            if (amount2El) amount2El.textContent = formatMoney(Math.round(amount));
-            if (termEl) termEl.textContent = `${term} ${monthWord(term)}`;
+            if (amountEl) amountEl.textContent = amount ? formatMoney(Math.round(amount)) : '—';
+            if (amount2El) amount2El.textContent = amount ? formatMoney(Math.round(amount)) : '—';
+            if (termEl) termEl.textContent = term ? `${term} ${monthWord(term)}` : '—';
             if (rateEl) rateEl.textContent = `${rate}`;
             document.getElementById('preview-payment-type').textContent = type === 'annuity' ? 'аннуитетными' : 'дифференцированными';
             document.getElementById('preview-borrower-signature').textContent = fullName;
 
-            // Update status card (Статус документа)
             updateStatusCard(contractNum);
-
-            // Update credit summary (Сводка по кредиту)
             updateSummaryCard(app);
+            refreshSidebarFromForm(app);
         }
 
         function populatePreviewFromParams(params) {
-            const amount = params.selectedAmount || params.amount || 0;
-            const term = params.selectedTerm || params.term || 0;
-            const rate = params.selectedRate || params.rate || 14;
-            const type = params.selectedPaymentType || params.paymentType || 'annuity';
+            params = normalizeLoanParams(params);
+            const amount = params.amount || 0;
+            const term = params.term || 0;
+            const rate = params.rate || 14;
+            const type = params.type || 'annuity';
             const contractNum = document.getElementById('contract-number').value || (params.applicationId ? getContractNumber(params.applicationId) : '—');
 
             document.getElementById('preview-contract-title').textContent = `КРЕДИТНЫЙ ДОГОВОР № ${contractNum}`;
-            document.getElementById('preview-borrower-name').textContent = '—';
+            document.getElementById('preview-borrower-name').textContent = applicationData ? (applicationData.client_name || applicationData.full_name || '—') : '—';
             const amountEl = document.getElementById('preview-amount');
             const amount2El = document.getElementById('preview-amount-2');
             const termEl = document.getElementById('preview-term');
             const rateEl = document.getElementById('preview-rate');
 
-            if (amountEl) amountEl.textContent = formatMoney(Math.round(amount));
-            if (amount2El) amount2El.textContent = formatMoney(Math.round(amount));
-            if (termEl) termEl.textContent = `${term} ${monthWord(term)}`;
+            if (amountEl) amountEl.textContent = amount ? formatMoney(Math.round(amount)) : '—';
+            if (amount2El) amount2El.textContent = amount ? formatMoney(Math.round(amount)) : '—';
+            if (termEl) termEl.textContent = term ? `${term} ${monthWord(term)}` : '—';
             if (rateEl) rateEl.textContent = `${rate}`;
             document.getElementById('preview-payment-type').textContent = type === 'annuity' ? 'аннуитетными' : 'дифференцированными';
-            document.getElementById('preview-borrower-signature').textContent = '—';
+            document.getElementById('preview-borrower-signature').textContent = applicationData ? (applicationData.client_name || applicationData.full_name || '—') : '—';
 
-            // Update status card
             updateStatusCard(contractNum);
+            updateSummaryCardFromParams(params);
+            refreshSidebarFromForm(applicationData || {});
         }
 
         function updateStatusCard(contractNum) {
             const numEl = document.getElementById('status-contract-num');
             const dateEl = document.getElementById('status-date');
             const creatorEl = document.getElementById('status-creator');
+            const contractDate = document.getElementById('contract-date')?.value;
             if (numEl) numEl.textContent = contractNum || '—';
-            if (dateEl) dateEl.textContent = new Date().toLocaleDateString('ru-RU');
+            if (dateEl) dateEl.textContent = contractDate ? new Date(contractDate).toLocaleDateString('ru-RU') : new Date().toLocaleDateString('ru-RU');
             if (creatorEl) creatorEl.textContent = 'Кредитный аналитик';
         }
 
         function updateSummaryCard(app) {
-            const type = loanParams ? (loanParams.type || 'annuity') : 'annuity';
-            const typeText = type === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
-            const amount = loanParams ? (loanParams.amount || 0) : (app.requested_amount || 0);
-            const term = loanParams ? (loanParams.term || 0) : (app.credit_term || 0);
-            const rate = loanParams ? (loanParams.rate || 0) : 14;
-            const productName = loanParams ? (loanParams.productName || '—') : getProductTypeName(app.credit_type);
+            const typeText = getLoanPaymentType() === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
+            setSummaryValues({
+                productName: getSelectedProductName(app),
+                amount: getLoanAmount(app),
+                term: getLoanTerm(app),
+                rate: getLoanRate(),
+                typeText,
+                clientName: app.client_name || app.full_name || '—'
+            });
+        }
+
+        function updateSummaryCardFromParams(params) {
+            params = normalizeLoanParams(params);
+            const typeText = params.type === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
+            setSummaryValues({
+                productName: params.productName || 'Кредитный продукт',
+                amount: params.amount,
+                term: params.term,
+                rate: params.rate,
+                typeText,
+                clientName: applicationData ? (applicationData.client_name || applicationData.full_name || '—') : '—'
+            });
+        }
+
+        function setSummaryValues({ productName, amount, term, rate, typeText, clientName }) {
+            const productEl = document.getElementById('summary-product');
+            const amountEl = document.getElementById('summary-amount');
+            const termEl = document.getElementById('summary-term');
+            const rateEl = document.getElementById('summary-rate');
+            const typeEl = document.getElementById('summary-type');
+            const clientEl = document.getElementById('summary-client');
+
+            if (productEl) productEl.textContent = productName || 'Кредитный продукт';
+            if (amountEl) amountEl.textContent = amount ? formatMoney(Math.round(amount)) : '—';
+            if (termEl) termEl.textContent = term ? `${term} ${monthWord(term)}` : '—';
+            if (rateEl) rateEl.textContent = rate ? `${rate}%` : '—';
+            if (typeEl) typeEl.textContent = typeText || 'Аннуитетный';
+            if (clientEl) clientEl.textContent = clientName || '—';
+        }
+
+        function readFieldValue(id) {
+            const el = document.getElementById(id);
+            return el ? (el.value || el.textContent || '').trim() : '';
+        }
+
+        function refreshSidebarFromForm(app = {}) {
+            const contractNum = readFieldValue('contract-number') || (applicationId ? getContractNumber(applicationId) : '—');
+            updateStatusCard(contractNum);
+
+            const productName = readFieldValue('contract-product-name') || getSelectedProductName(app) || 'Кредитный продукт';
+            const amountText = readFieldValue('contract-amount') || (getLoanAmount(app) ? formatMoney(Math.round(getLoanAmount(app))) : '—');
+            const termText = readFieldValue('contract-term') || (getLoanTerm(app) ? `${getLoanTerm(app)} ${monthWord(getLoanTerm(app))}` : '—');
+            const rateText = readFieldValue('contract-rate') || `${getLoanRate()}%`;
+            const typeText = getLoanPaymentType() === 'annuity' ? 'Аннуитетный' : 'Дифференцированный';
+            const clientName = app.client_name || app.full_name || readFieldValue('borrower-fullname') || '—';
 
             const productEl = document.getElementById('summary-product');
             const amountEl = document.getElementById('summary-amount');
@@ -866,15 +958,24 @@
             const clientEl = document.getElementById('summary-client');
 
             if (productEl) productEl.textContent = productName;
-            if (amountEl) amountEl.textContent = formatMoney(Math.round(amount));
-            if (termEl) termEl.textContent = `${term} мес`;
-            if (rateEl) rateEl.textContent = `${rate}%`;
+            if (amountEl) amountEl.textContent = amountText;
+            if (termEl) termEl.textContent = termText;
+            if (rateEl) rateEl.textContent = rateText;
             if (typeEl) typeEl.textContent = typeText;
-            if (clientEl) clientEl.textContent = app.client_name || app.full_name || '—';
+            if (clientEl) clientEl.textContent = clientName;
         }
 
         function calculateAndSetResults(amount, term, rate, type) {
-            const loanAmount = amount - (loanParams.selectedDownPayment || 0);
+            amount = Number(amount || 0);
+            term = Number(term || 0);
+            rate = Number(rate || 0);
+            if (!amount || !term) {
+                document.getElementById('calc-monthly').textContent = '—';
+                document.getElementById('calc-total').textContent = '—';
+                document.getElementById('calc-overpayment').textContent = '—';
+                return;
+            }
+            const loanAmount = amount - (loanParams?.selectedDownPayment || 0);
             const monthlyRate = rate / 100 / 12;
 
             let monthlyPayment, totalPayment;
@@ -983,27 +1084,95 @@
             });
         }
 
-        function sendToClient() {
+        function buildContractPayload() {
             const appId = applicationId || getQueryParam('application_id');
             if (!appId) {
-                alert('ID заявки не указан.');
-                return;
+                throw new Error('ID заявки не указан.');
             }
+            return {
+                application_id: appId,
+                contract_number: document.getElementById('contract-number').value || getContractNumber(appId),
+                product_name: document.getElementById('contract-product-name').value || '',
+                amount: getLoanAmount(applicationData || {}),
+                term: getLoanTerm(applicationData || {}),
+                rate: getLoanRate()
+            };
+        }
 
-            fetch(`${API_URL}/api/documents/${appId}/send-to-client`, {
+        function getContractDraftKey(appId) {
+            return `contractDraft:${appId}`;
+        }
+
+        function saveContractDraft() {
+            const payload = buildContractPayload();
+            payload.generated_at = new Date().toISOString();
+            localStorage.setItem(getContractDraftKey(payload.application_id), JSON.stringify(payload));
+            const statusEl = document.getElementById('status-creator');
+            if (statusEl) statusEl.textContent = 'Кредитный аналитик · договор сформирован';
+            return payload;
+        }
+
+        function getContractDraft() {
+            const appId = applicationId || getQueryParam('application_id');
+            if (!appId) return null;
+            const raw = localStorage.getItem(getContractDraftKey(appId));
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (err) {
+                return null;
+            }
+        }
+
+        async function sendToClient(silent = false) {
+            const appId = applicationId || getQueryParam('application_id');
+            if (!appId) {
+                throw new Error('ID заявки не указан.');
+            }
+            const payload = getContractDraft() || saveContractDraft();
+
+            const response = await fetch(`${API_URL}/api/documents/${encodeURIComponent(appId)}/send-to-client`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                alert(data.message || 'Документы отправлены клиенту');
-            })
-            .catch(err => {
-                alert('Ошибка отправки: ' + err.message);
+                },
+                body: JSON.stringify(payload)
             });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || data.message || 'Не удалось отправить договор клиенту');
+            }
+            if (!silent) {
+                alert(data.message || 'Документы отправлены клиенту на подпись');
+            }
+            return data;
+        }
+
+        let isSendingToClient = false;
+
+        async function handleSendToClientClick() {
+            if (isSendingToClient) return;
+            isSendingToClient = true;
+            const btn = document.getElementById('send-to-client-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.dataset.originalText = btn.textContent;
+                btn.textContent = 'Отправляем...';
+            }
+            try {
+                await sendToClient(false);
+                window.location.href = '/analyst';
+                return;
+            } catch (err) {
+                alert('Ошибка отправки клиенту: ' + err.message);
+            } finally {
+                isSendingToClient = false;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>✉</span> Отправить клиенту';
+                }
+            }
         }
 
         function checkAuth() {
@@ -1015,17 +1184,22 @@
                 // Update links with application_id
                 applicationId = getQueryParam('application_id');
                 
-                // Load loan parameters from URL first
+                // Load loan parameters from URL/localStorage first
+                const savedParams = readSavedLoanParams();
                 const urlAmount = getQueryParam('amount');
+                if (savedParams) {
+                    loanParams = savedParams;
+                }
                 if (urlAmount) {
-                    loanParams = {
+                    loanParams = normalizeLoanParams({
+                        ...loanParams,
                         amount: parseFloat(urlAmount),
-                        term: parseInt(getQueryParam('term')) || 24,
-                        rate: parseFloat(getQueryParam('rate')) || 14,
-                        type: getQueryParam('type') || 'annuity',
-                        productName: getQueryParam('product') || '',
-                        selectedDownPayment: 0
-                    };
+                        term: parseInt(getQueryParam('term')) || loanParams?.term || 24,
+                        rate: parseFloat(getQueryParam('rate')) || loanParams?.rate || 14,
+                        type: getQueryParam('type') || loanParams?.type || 'annuity',
+                        productName: loanParams?.productName || getQueryParam('product') || '',
+                        selectedDownPayment: loanParams?.selectedDownPayment || 0
+                    });
                 }
                 
                 if (applicationId) {
@@ -1034,7 +1208,8 @@
                     });
                 }
                 
-                // Load application data and populate
+                // Fill the sidebar immediately, then refine it after API data arrives
+                refreshSidebarFromForm(applicationData || {});
                 loadApplicationData();
             } else {
                 document.getElementById('login-section').classList.remove('hidden');
@@ -1085,8 +1260,34 @@
             document.getElementById('tab-' + tabName).classList.add('active');
         }
 
+        let isSendingContract = false;
+
+        async function confirmGenerateAndSend() {
+            if (isSendingContract) return;
+            isSendingContract = true;
+            const btn = document.getElementById('confirm-generate-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Фиксируем...';
+            }
+            try {
+                saveContractDraft();
+                hideConfirmDialog();
+                alert('Договор сформирован. Теперь нажмите «Отправить клиенту», чтобы передать документы на подпись.');
+            } catch (err) {
+                alert('Ошибка формирования договора: ' + err.message);
+            } finally {
+                isSendingContract = false;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Сформировать';
+                }
+            }
+        }
+
         function showConfirmDialog() {
             document.getElementById('confirm-dialog').classList.remove('hidden');
+            bindGenerateButton();
         }
 
         function hideConfirmDialog(e) {
@@ -1096,7 +1297,51 @@
         }
 
         // Initialize
+        function bindGenerateButton() {
+            const btn = document.getElementById('confirm-generate-btn');
+            if (!btn || btn.dataset.bound === '1') return;
+            btn.dataset.bound = '1';
+            btn.disabled = false;
+            btn.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                confirmGenerateAndSend();
+            });
+        }
+
+        function bindSendButton() {
+            const btn = document.getElementById('send-to-client-btn');
+            if (!btn || btn.dataset.bound === '1') return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                handleSendToClientClick();
+            });
+        }
+
+        document.addEventListener('click', function(event) {
+            if (event.target && event.target.id === 'confirm-generate-btn') {
+                event.preventDefault();
+                event.stopPropagation();
+                confirmGenerateAndSend();
+            }
+            if (event.target && event.target.id === 'send-to-client-btn') {
+                event.preventDefault();
+                event.stopPropagation();
+                handleSendToClientClick();
+            }
+        }, true);
+
+        window.confirmGenerateAndSend = confirmGenerateAndSend;
+        window.sendToClient = sendToClient;
+        window.handleSendToClientClick = handleSendToClientClick;
+        window.showConfirmDialog = showConfirmDialog;
+        window.hideConfirmDialog = hideConfirmDialog;
+
         window.onload = function() {
+            bindGenerateButton();
+            bindSendButton();
             checkAuth();
         };
     </script>

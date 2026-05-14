@@ -32,3 +32,8 @@ func AnalystOnly() gin.HandlerFunc {
 func RepresentativeOnly() gin.HandlerFunc {
 	return RoleMiddleware("representative", "admin")
 }
+
+// CreditManagerOnly middleware - allows credit managers and admins
+func CreditManagerOnly() gin.HandlerFunc {
+	return RoleMiddleware("credit_manager", "admin")
+}

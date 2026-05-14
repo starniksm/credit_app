@@ -37,7 +37,7 @@ func (h *AdminUserHandler) CreateUser(c *gin.Context) {
 		Username string `json:"username" binding:"required"`
 		Email    string `json:"email" binding:"required,email"`
 		Password string `json:"password" binding:"required,min=6"`
-		Role     string `json:"role" binding:"required,oneof=analyst representative admin"`
+		Role     string `json:"role" binding:"required,oneof=analyst representative credit_manager admin"`
 		FullName string `json:"full_name"`
 		Phone    string `json:"phone"`
 	}
@@ -167,7 +167,7 @@ func (h *AdminUserHandler) UpdateUserRole(c *gin.Context) {
 	id := c.Param("id")
 
 	var req struct {
-		Role string `json:"role" binding:"required,oneof=analyst representative admin"`
+		Role string `json:"role" binding:"required,oneof=analyst representative credit_manager admin"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

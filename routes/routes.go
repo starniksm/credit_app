@@ -20,6 +20,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	repHandler := handlers.NewRepresentativeHandler(db)
 	docHandler := handlers.NewDocumentHandler(db)
 	adminUserHandler := handlers.NewAdminUserHandler(db)
+	creditManagerHandler := handlers.NewCreditManagerHandler(db)
 
 	// Define routes
 	api := r.Group("/api")
@@ -29,6 +30,17 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 		{
 			auth.POST("/login", handlers.Login(db))
 			auth.POST("/register", handlers.Register(db))
+		}
+
+		contracts := api.Group("/contracts")
+		{
+			contracts.POST("/:id/signed", docHandler.MarkContractSigned)
+		}
+
+		credits := api.Group("/credits")
+		{
+			credits.POST("/delinquency", docHandler.MarkCreditDelinquency)
+			credits.POST("/restructure/decision", docHandler.MarkRestructureDecision)
 		}
 
 		// Protected endpoints
@@ -87,6 +99,16 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 				representative.POST("/meetings", repHandler.CreateMeeting)
 				representative.PUT("/meetings/:id/status", repHandler.UpdateMeetingStatus)
 				representative.POST("/applications", repHandler.CreateCardApplication)
+			}
+
+			// Credit manager endpoints
+			creditManager := protected.Group("/credit-manager")
+			creditManager.Use(middleware.CreditManagerOnly())
+			{
+				creditManager.GET("/clients", creditManagerHandler.GetProblemClients)
+				creditManager.GET("/clients/:id/assessment", creditManagerHandler.GetClientAssessment)
+				creditManager.POST("/clients/:id/income-request", creditManagerHandler.RequestOfficialIncomeInfo)
+				creditManager.POST("/clients/:id/restructure", creditManagerHandler.RestructureClient)
 			}
 
 			// Document generation endpoints
@@ -173,6 +195,17 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/representative/new-application", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-cache")
 		c.File("./static/representative/new-application.html")
+	})
+
+	// Credit manager routes
+	r.GET("/credit-manager", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/credit-manager.html")
+	})
+
+	r.GET("/credit-manager/restructure/:id", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.File("./static/credit-restructure.html")
 	})
 
 	// Health check endpoint (public)

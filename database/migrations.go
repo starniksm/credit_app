@@ -57,6 +57,7 @@ func MigrateTables(db *gorm.DB) {
 	ensureUser(db, "analyst2", "analyst2@example.com", "analyst", "Мария Смирнова", "analyst223")
 	ensureUser(db, "analyst3", "analyst3@example.com", "analyst", "Дмитрий Соколов", "analyst323")
 	ensureUser(db, "analyst4", "analyst4@example.com", "analyst", "Елена Кузнецова", "analyst423")
+	ensureUser(db, "manager", "manager@example.com", "credit_manager", "Ольга Орлова", "manager123")
 }
 
 func ensureUser(db *gorm.DB, username, email, role, fullName, password string) {

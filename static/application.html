@@ -21,6 +21,8 @@
         .status-badge.new { background: #e3f2fd; color: #1976d2; border: 1px solid #90caf9; }
         .status-badge.in_review { background: #fff8e1; color: #f57c00; border: 1px solid #ffcc80; }
         .status-badge.approved { background: #e8f5e9; color: #388e3c; border: 1px solid #a5d6a7; }
+        .status-badge.contract_sent { background: #f3e8ff; color: #6f42c1; border: 1px solid #d8b4fe; }
+        .status-badge.issued { background: #e8f5e9; color: #166534; border: 1px solid #86efac; }
         .status-badge.rejected { background: #ffebee; color: #d32f2f; border: 1px solid #ef9a9a; }
         .status-badge.revision { background: #fff3e0; color: #e65100; border: 1px solid #ffb74d; }
         .priority-badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
@@ -840,7 +842,7 @@
                 const token = localStorage.getItem('adminToken');
                 console.log('Using token:', token ? 'present' : 'missing');
                 
-                const response = await fetch(`/api/admin/applications/${appId}/decision`, {
+                const response = await fetch(`/api/admin/applications/${encodeURIComponent(appId)}/decision`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -883,7 +885,7 @@
                 const token = localStorage.getItem('adminToken');
                 console.log('Using token:', token ? 'present' : 'missing');
                 
-                const response = await fetch(`/api/admin/applications/${appId}/decision`, {
+                const response = await fetch(`/api/admin/applications/${encodeURIComponent(appId)}/decision`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -928,7 +930,7 @@
                 const token = localStorage.getItem('adminToken');
                 console.log('Using token:', token ? 'present' : 'missing');
                 
-                const response = await fetch(`/api/admin/applications/${appId}/documents-request`, {
+                const response = await fetch(`/api/admin/applications/${encodeURIComponent(appId)}/documents-request`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -974,7 +976,7 @@
                 const token = localStorage.getItem('adminToken');
                 console.log('Using token:', token ? 'present' : 'missing');
                 
-                const response = await fetch(`/api/applications/${appId}/request-bki`, {
+                const response = await fetch(`/api/applications/${encodeURIComponent(appId)}/request-bki`, {
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer ' + token
@@ -1149,6 +1151,8 @@
                 'new': 'Новая',
                 'in_review': 'В работе',
                 'approved': 'Одобрена',
+                'contract_sent': 'На подписании',
+                'issued': 'Кредит выдан',
                 'rejected': 'Отклонена',
                 'revision': 'На доработке'
             };
@@ -1181,6 +1185,8 @@
                 'new': 'new',
                 'in_review': 'in_review',
                 'approved': 'approved',
+                'contract_sent': 'contract_sent',
+                'issued': 'issued',
                 'rejected': 'rejected',
                 'revision': 'revision'
             };
@@ -1227,9 +1233,9 @@
                     return;
                 }
 
-                // Extract ID from URL path (/application/{id})
+                // Extract ID from URL path (/application/{id}) and keep it decoded for UI.
                 var pathParts = window.location.pathname.split('/');
-                appId = pathParts[pathParts.length - 1];
+                appId = decodeURIComponent(pathParts[pathParts.length - 1] || '');
                 console.log('App ID from URL:', appId);
 
                 if (!appId || appId === 'application') {
@@ -1245,7 +1251,7 @@
                 }
 
                 // Fetch application data
-                var url = '/api/applications/' + appId;
+                var url = '/api/applications/' + encodeURIComponent(appId);
                 console.log('Fetching:', url);
                 var response = await fetch(url, {
                     headers: {
@@ -1464,6 +1470,15 @@
                     </div>
                 `;
 
+                const debtDetails = safeParseJSON(app.debt_burden_details, null) || {};
+                let dtiRatio = Number(app.dti_ratio || app.debt_burden_ratio || 0);
+                const totalMonthlyPayments = Number(debtDetails.total_monthly_payments || 0);
+                const existingMonthlyPayments = Number(debtDetails.existing_monthly_payments || 0);
+                const newLoanMonthlyPayment = Number(debtDetails.new_loan_monthly_payment || app.monthly_payment || 0);
+                if (!dtiRatio && app.monthly_income > 0 && totalMonthlyPayments > 0) {
+                    dtiRatio = totalMonthlyPayments / app.monthly_income;
+                }
+
                 // BKI stats
                 const bkiStats = [
                     { label: 'Всего кредитов', value: app.total_credits || 0 },
@@ -1473,7 +1488,7 @@
                     { label: 'Текущие просрочки', value: app.current_delinquencies ? 'Да' : 'Нет' },
                     { label: 'Макс. просрочка', value: app.max_delinquency_days ? app.max_delinquency_days + ' дней' : '—' },
                     { label: 'Общая задолженность', value: formatCurrency(app.total_debt || 0) },
-                    { label: 'Коэффициент DTI', value: app.dti_ratio ? (app.dti_ratio * 100).toFixed(1) + '%' : '—' }
+                    { label: 'Коэффициент DTI', value: dtiRatio ? (dtiRatio * 100).toFixed(1) + '%' : '—' }
                 ];
 
                 getElement('bki-stats').innerHTML = bkiStats.map(stat => `
@@ -1519,11 +1534,12 @@
                 `).join('');
 
                 // Additional BKI info
-                const debtDetails = safeParseJSON(app.debt_burden_details, null);
                 const additionalInfo = [
                     { label: 'Доступный лимит', value: formatCurrency(app.available_credit_limit || 0) },
-                    { label: 'Коэффициент долговой нагрузки', value: app.dti_ratio ? (app.dti_ratio * 100).toFixed(1) + '%' : '—' },
-                    { label: 'Ежемесячные платежи по действующим кредитам', value: debtDetails ? formatCurrency(debtDetails.total_monthly_payments || 0) : '—' }
+                    { label: 'Коэффициент долговой нагрузки', value: dtiRatio ? (dtiRatio * 100).toFixed(1) + '%' : '—' },
+                    { label: 'Платежи по действующим кредитам', value: existingMonthlyPayments ? formatCurrency(existingMonthlyPayments) : '—' },
+                    { label: 'Платеж по новой заявке', value: newLoanMonthlyPayment ? formatCurrency(newLoanMonthlyPayment) : '—' },
+                    { label: 'Итого ежемесячные платежи', value: totalMonthlyPayments ? formatCurrency(totalMonthlyPayments) : '—' }
                 ];
 
                 getElement('bki-additional').innerHTML = additionalInfo.map(item => `
@@ -1853,7 +1869,8 @@
 
         // Update Modal Summaries
         function updateModalSummaries(app) {
-            var summaryHtml = '<div class="modal-summary-row"><span>Заявка</span><span>' + appId + '</span></div><div class="modal-summary-row"><span>Клиент</span><span>' + (app.full_name || '—') + '</span></div><div class="modal-summary-row"><span>Сумма</span><span>' + formatCurrency(app.requested_amount) + '</span></div><div class="modal-summary-row"><span>Срок</span><span>' + (app.credit_term || '—') + ' мес.</span></div>';
+            var displayId = (app && app.id) ? app.id : appId;
+            var summaryHtml = '<div class="modal-summary-row"><span>Заявка</span><span>' + displayId + '</span></div><div class="modal-summary-row"><span>Клиент</span><span>' + (app.full_name || app.client_name || '—') + '</span></div><div class="modal-summary-row"><span>Сумма</span><span>' + formatCurrency(app.requested_amount) + '</span></div><div class="modal-summary-row"><span>Срок</span><span>' + (app.credit_term || '—') + ' мес.</span></div>';
 
             getElement('summary-approve').innerHTML = summaryHtml;
             getElement('summary-reject').innerHTML = summaryHtml;

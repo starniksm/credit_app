@@ -31,11 +31,14 @@
         .applications-table { width: 100%; border-collapse: collapse; }
         .applications-table th, .applications-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
         .applications-table th { background: #f8f9fa; font-weight: 600; color: #555; }
+        .applications-table th:nth-child(5), .applications-table td:nth-child(5) { min-width: 150px; }
         .applications-table tr:hover { background: #f8f9fa; }
-        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .status-badge { display: inline-flex; align-items: center; justify-content: center; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; line-height: 1.2; white-space: nowrap; min-width: max-content; }
         .status-badge.new { background: #17a2b8; color: white; }
         .status-badge.in_review { background: #ffc107; color: #212529; }
         .status-badge.approved { background: #28a745; color: white; }
+        .status-badge.contract_sent { background: #6f42c1; color: white; }
+        .status-badge.issued { background: #198754; color: white; }
         .status-badge.rejected { background: #dc3545; color: white; }
         .action-btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
         .action-btn.approve { background: #28a745; color: white; }
@@ -109,6 +112,48 @@
         .timeline-author { font-size: 12px; color: #666; padding: 3px 10px; background: #e8e8e8; border-radius: 10px; }
         .timeline-date { font-size: 12px; color: #999; }
         .timeline-comment { font-size: 13px; color: #555; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
+        .application-toast {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 3000;
+            width: min(380px, calc(100vw - 48px));
+            background: #1f2937;
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 16px 40px rgba(0,0,0,.24);
+            padding: 16px 18px;
+            opacity: 0;
+            transform: translateY(16px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+        .application-toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        .application-toast__title { font-weight: 800; margin-bottom: 6px; }
+        .application-toast__text { color: #d1d5db; font-size: 14px; line-height: 1.45; }
+        .application-toast__button {
+            margin-top: 12px;
+            border: none;
+            border-radius: 7px;
+            background: #667eea;
+            color: white;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .refresh-status { color: #6b7280; font-size: 13px; }
+        .refresh-status.error { color: #dc3545; font-weight: 600; }
+        .refresh-status.loading { color: #6f42c1; }
+        .sound-toggle {
+            background: #eef2ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .sound-toggle.enabled { background: #dcfce7; color: #166534; border-color: #86efac; }
     </style>
 </head>
 <body>
@@ -175,7 +220,11 @@
                 <div class="section">
                     <div class="section-header">
                         <h2>Заявки</h2>
-                        <button class="action-btn create" onclick="showCreateForm()">+ Создать заявку</button>
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span id="refresh-status" class="refresh-status">Автообновление включено</span>
+                            <button id="sound-toggle" class="sound-toggle" onclick="enableNotificationSound()">Включить звук</button>
+                            <button class="action-btn create" onclick="showCreateForm()">+ Создать заявку</button>
+                        </div>
                     </div>
                     
                     <!-- Filter Bar -->
@@ -332,15 +381,35 @@
         </div>
     </div>
 
+    <div id="application-toast" class="application-toast" role="status" aria-live="polite">
+        <div class="application-toast__title">Новая заявка</div>
+        <div id="application-toast-text" class="application-toast__text"></div>
+        <button class="application-toast__button" onclick="hideApplicationToast()">Понятно</button>
+    </div>
+
     <script>
         // Use relative API URL (works regardless of port/domain)
         const API_URL = '';
         let token = null;
         let allApplications = [];
         let currentFilter = { status: '', client_name: '', app_id: '' };
+        let knownApplicationIds = new Set();
+        let applicationsLoadedOnce = false;
+        let refreshTimer = null;
+        let refreshInProgress = false;
+        let notificationAudioContext = null;
+        let notificationSoundEnabled = localStorage.getItem('notificationSoundEnabled') === '1';
+        let toastTimer = null;
         
         // Check token and load dashboard on page load
         checkTokenAndLoadDashboard();
+        document.addEventListener('click', unlockNotificationSound, { once: true });
+        window.addEventListener('focus', () => {
+            if (token) loadDashboard({ silent: true });
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && token) loadDashboard({ silent: true });
+        });
         
         async function checkTokenAndLoadDashboard() {
             // Get fresh token from localStorage
@@ -366,6 +435,7 @@
             
             try {
                 const response = await fetch(`${API_URL}/api/admin/dashboard/stats`, {
+                    cache: 'no-store',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
@@ -397,7 +467,8 @@
         function showDashboard() {
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('dashboard-section').classList.remove('hidden');
-
+            updateSoundToggle();
+            startAutoRefresh();
         }
         
         function showApplicationsList() {
@@ -436,6 +507,7 @@
                         }
                     }
                     showDashboard();
+                    unlockNotificationSound();
                     loadDashboard();
                 } else {
                     showLoginError(data.error || 'Ошибка входа');
@@ -454,14 +526,50 @@
             window.location.href = '/';
         }
         
-        async function loadDashboard() {
-            await loadStats();
-            await loadApplications();
+        async function loadDashboard(options = {}) {
+            if (!token || refreshInProgress) return;
+            refreshInProgress = true;
+            updateRefreshStatus('loading');
+            try {
+                await Promise.all([loadStats(options), loadApplications(options)]);
+                updateRefreshStatus('ok');
+            } catch (err) {
+                console.error('Dashboard refresh failed:', err);
+                updateRefreshStatus('error');
+                if (!options.silent) showMessage('Ошибка автообновления данных', 'error');
+            } finally {
+                refreshInProgress = false;
+            }
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) return;
+            refreshTimer = setInterval(() => {
+                if (token) loadDashboard({ silent: true });
+            }, 3000);
+        }
+
+        function updateRefreshStatus(state = 'ok') {
+            const el = document.getElementById('refresh-status');
+            if (!el) return;
+            el.classList.toggle('error', state === 'error');
+            el.classList.toggle('loading', state === 'loading');
+            if (state === 'loading') {
+                el.textContent = 'Обновление...';
+                return;
+            }
+            if (state === 'error') {
+                el.textContent = 'Автообновление: ошибка соединения';
+                return;
+            }
+            const now = new Date();
+            el.textContent = `Обновлено ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
         }
         
-        async function loadStats() {
+        async function loadStats(options = {}) {
             try {
                 const response = await fetch(`${API_URL}/api/admin/dashboard/stats`, {
+                    cache: 'no-store',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
@@ -485,42 +593,159 @@
                 }
             } catch (err) {
                 console.error('Error loading stats:', err);
+                if (!options.silent) showMessage('Ошибка загрузки статистики', 'error');
+                throw err;
             }
         }
         
-        async function loadApplications() {
+        async function loadApplications(options = {}) {
             try {
-                console.log('Loading applications with token:', token ? 'yes' : 'no');
                 const response = await fetch(`${API_URL}/api/admin/applications/review`, {
+                    cache: 'no-store',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                console.log('Response status:', response.status);
-                
                 if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) {
+                        localStorage.removeItem('adminToken');
+                        showLogin();
+                        return;
+                    }
                     const errorText = await response.text();
                     console.error('API error:', response.status, errorText);
-                    showMessage('Ошибка загрузки заявок: ' + response.status, 'error');
-                    return;
+                    if (!options.silent) showMessage('Ошибка загрузки заявок: ' + response.status, 'error');
+                    throw new Error('Applications API error: ' + response.status);
                 }
                 
                 const contentType = response.headers.get('content-type');
                 if (!contentType || !contentType.includes('application/json')) {
                     const text = await response.text();
                     console.error('Non-JSON response:', text);
-                    showMessage('Ошибка: неверный формат ответа', 'error');
-                    return;
+                    if (!options.silent) showMessage('Ошибка: неверный формат ответа', 'error');
+                    throw new Error('Applications API returned non-JSON response');
                 }
                 
                 const data = await response.json();
-                console.log('DATA:', data);
+                detectNewApplications(data);
                 allApplications = data;
-                console.log('ALL APPS:', allApplications.length);
                 applyFilters();
             } catch (err) {
                 console.error('Load applications error:', err);
-                showMessage('Ошибка загрузки заявок', 'error');
+                if (!options.silent) showMessage('Ошибка загрузки заявок', 'error');
+                throw err;
             }
+        }
+
+        function getApplicationKey(app) {
+            return String(app.id || app.ID || `${app.client_name || app.full_name || ''}-${app.created_at || ''}-${app.requested_amount || ''}`);
+        }
+
+        function detectNewApplications(applications) {
+            const list = Array.isArray(applications) ? applications : [];
+            const ids = new Set(list.map(getApplicationKey).filter(Boolean));
+            const newApplications = list.filter(app => {
+                const key = getApplicationKey(app);
+                return key && !knownApplicationIds.has(key);
+            });
+
+            if (applicationsLoadedOnce && newApplications.length > 0) {
+                notifyNewApplications(newApplications);
+            }
+
+            knownApplicationIds = ids;
+            applicationsLoadedOnce = true;
+        }
+
+        function notifyNewApplications(applications) {
+            showApplicationToast(applications);
+            playNotificationSound();
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const first = applications[0];
+                new Notification('Новая кредитная заявка', {
+                    body: applications.length === 1
+                        ? `${first.full_name || first.client_name || 'Клиент'} · ${formatCurrency(first.requested_amount || first.credit_amount)}`
+                        : `Поступило новых заявок: ${applications.length}`,
+                });
+            }
+        }
+
+        function unlockNotificationSound() {
+            if (!window.AudioContext && !window.webkitAudioContext) return;
+            if (!notificationAudioContext) {
+                const AudioCtor = window.AudioContext || window.webkitAudioContext;
+                notificationAudioContext = new AudioCtor();
+            }
+            if (notificationAudioContext.state === 'suspended') {
+                notificationAudioContext.resume().catch(() => {});
+            }
+        }
+
+        function enableNotificationSound() {
+            notificationSoundEnabled = true;
+            localStorage.setItem('notificationSoundEnabled', '1');
+            unlockNotificationSound();
+            updateSoundToggle();
+            playNotificationSound(true);
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().catch(() => {});
+            }
+            showMessage('Звук уведомлений включен', 'success');
+        }
+
+        function updateSoundToggle() {
+            const btn = document.getElementById('sound-toggle');
+            if (!btn) return;
+            btn.classList.toggle('enabled', notificationSoundEnabled);
+            btn.textContent = notificationSoundEnabled ? 'Звук включен' : 'Включить звук';
+            btn.title = notificationSoundEnabled
+                ? 'Звук будет проигрываться при новых заявках'
+                : 'Нажмите один раз, чтобы браузер разрешил звук уведомлений';
+        }
+
+        function playNotificationSound(force = false) {
+            try {
+                if (!notificationSoundEnabled && !force) return;
+                unlockNotificationSound();
+                if (!notificationAudioContext) return;
+
+                const now = notificationAudioContext.currentTime;
+                const gain = notificationAudioContext.createGain();
+                gain.gain.setValueAtTime(0.0001, now);
+                gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+                gain.connect(notificationAudioContext.destination);
+
+                [880, 1175].forEach((frequency, index) => {
+                    const oscillator = notificationAudioContext.createOscillator();
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(frequency, now + index * 0.14);
+                    oscillator.connect(gain);
+                    oscillator.start(now + index * 0.14);
+                    oscillator.stop(now + index * 0.14 + 0.16);
+                });
+            } catch (err) {
+                console.warn('Notification sound is unavailable:', err);
+            }
+        }
+
+        function showApplicationToast(applications) {
+            const toast = document.getElementById('application-toast');
+            const text = document.getElementById('application-toast-text');
+            const first = applications[0];
+
+            text.textContent = applications.length === 1
+                ? `${first.full_name || first.client_name || 'Клиент'} · ${formatCurrency(first.requested_amount || first.credit_amount)}`
+                : `Поступило новых заявок: ${applications.length}`;
+
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(hideApplicationToast, 7000);
+        }
+
+        function hideApplicationToast() {
+            const toast = document.getElementById('application-toast');
+            if (toast) toast.classList.remove('show');
         }
         
         function filterByStatus(status) {
@@ -566,13 +791,10 @@
         }
         
         function renderApplications(applications) {
-            console.log('RENDER:', applications?.length);
-            
             const tbody = document.getElementById('applications-table');
             const noData = document.getElementById('no-applications');
             
-            if (!tbody || !tbody) {
-                console.log('NO TBODY');
+            if (!tbody) {
                 return;
             }
             
@@ -583,8 +805,6 @@
             }
             
             if (noData) noData.classList.add('hidden');
-            console.log('TBODY:', tbody);
-            console.log('APPS TO RENDER:', applications.length);
             tbody.innerHTML = applications.map(app => {
                 const statusText = getStatusText(app.status);
                 const actions = getActions(app);
@@ -607,6 +827,8 @@
                 'new': 'Новая',
                 'in_review': 'В работе',
                 'approved': 'Одобрена',
+                'contract_sent': 'На подписании',
+                'issued': 'Кредит выдан',
                 'rejected': 'Отклонена'
             };
             return texts[status] || status;
